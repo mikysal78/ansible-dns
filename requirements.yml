@@ -1,7 +1,10 @@
 ---
 collections:
-  # proxmox_kvm, proxmox_disk, proxmox_nic, proxmox_snap sono in community.general
   - name: community.general
     version: ">=8.0.0"
   - name: ansible.posix
     version: ">=1.5.0"
+  # Moduli Proxmox (proxmox_kvm, proxmox_disk, proxmox_nic, proxmox_snap)
+  # spostati da community.general a community.proxmox
+  - name: community.proxmox
+    version: ">=1.0.0"

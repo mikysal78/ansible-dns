@@ -182,7 +182,7 @@ ansible-dns/
 ├── .yamllint
 ├── .gitignore
 ├── ansible.cfg
-├── requirements.yml           # community.general, ansible.posix
+├── requirements.yml           # community.general, ansible.posix, community.proxmox
 ├── README.md
 ├── LICENSE
 ├── CHANGELOG.md

@@ -18,6 +18,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - CI: immagine molecule geerlingguy/docker-debian13-ansible con systemd
 - CI: check vault.yml corretto per file escluso da git
 - Aggiunto vault.yml.example come template committabile (vault reale resta escluso)
+- Moduli Proxmox migrati a community.proxmox (deprecati in community.general 15.0.0)
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

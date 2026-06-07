@@ -5,7 +5,7 @@
 # ============================================================
 
 - name: Configura hardware VM (CPU, RAM, tipo macchina)
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_port:         "{{ proxmox_port }}"
     api_user:         "{{ proxmox_user }}"
@@ -41,7 +41,7 @@
   delegate_to: localhost
 
 - name: Ridimensiona disco principale
-  community.general.proxmox_disk:
+  community.proxmox.proxmox_disk:
     api_host:         "{{ proxmox_host }}"
     api_port:         "{{ proxmox_port }}"
     api_user:         "{{ proxmox_user }}"
@@ -55,7 +55,7 @@
   delegate_to: localhost
 
 - name: Configura interfaccia di rete (VirtIO)
-  community.general.proxmox_nic:
+  community.proxmox.proxmox_nic:
     api_host:         "{{ proxmox_host }}"
     api_port:         "{{ proxmox_port }}"
     api_user:         "{{ proxmox_user }}"
@@ -71,7 +71,7 @@
   delegate_to: localhost
 
 - name: Configura cloud-init (IP statico, utente, SSH key, snippet)
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_port:         "{{ proxmox_port }}"
     api_user:         "{{ proxmox_user }}"

@@ -31,9 +31,9 @@ use_default_rules: true
 
 mock_modules:
   - community.general.opkg
-  - community.general.proxmox_kvm
-  - community.general.proxmox_disk
-  - community.general.proxmox_nic
-  - community.general.proxmox_snap
+  - community.proxmox.proxmox_kvm
+  - community.proxmox.proxmox_disk
+  - community.proxmox.proxmox_nic
+  - community.proxmox.proxmox_snap
 
 verbosity: 1

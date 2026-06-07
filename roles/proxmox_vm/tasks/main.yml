@@ -5,7 +5,7 @@
 # ============================================================
 
 - name: "[proxmox] Verifica che il template esista"
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_port:         "{{ proxmox_port }}"
     api_user:         "{{ proxmox_user }}"
@@ -26,7 +26,7 @@
   when: template_check.failed or template_check.proxmox_vms is not defined
 
 - name: "[proxmox] Verifica se la VM primary esiste già"
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_port:         "{{ proxmox_port }}"
     api_user:         "{{ proxmox_user }}"

@@ -5,7 +5,7 @@
 # ============================================================
 
 - name: Avvia VM primary
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_port:         "{{ proxmox_port }}"
     api_user:         "{{ proxmox_user }}"
