@@ -46,6 +46,11 @@ platforms:
 
 provisioner:
   name: ansible
+  env:
+    # I role sono nella root del progetto. Molecule esegue il syntax-check
+    # dalla cartella dello scenario, dove roles/ non esiste: senza questo
+    # path assoluto il converge fallisce con "role 'packages' not found".
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/roles"
   inventory:
     group_vars:
       all:
@@ -67,6 +72,9 @@ provisioner:
             file: "zones/example.com.yml"
             type: master
             ddns_enabled: false
+        # In Molecule playbook_dir = molecule/default, ma le zone sono nella
+        # root del progetto: puntiamo lì via env var di Molecule.
+        dns_zones_dir_src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
         bind_user: bind
         bind_group: bind
         bind_config_dir: /etc/bind

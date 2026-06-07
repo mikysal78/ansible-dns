@@ -19,6 +19,9 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - CI: check vault.yml corretto per file escluso da git
 - Aggiunto vault.yml.example come template committabile (vault reale resta escluso)
 - Moduli Proxmox migrati a community.proxmox (deprecati in community.general 15.0.0)
+- Fix Molecule: ANSIBLE_ROLES_PATH per trovare i role dalla cartella scenario
+- Fix bug lookup zone: dns_zones_dir_src punta alla root (site.yml falliva)
+- molecule/default/requirements.yml per dependency Galaxy
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

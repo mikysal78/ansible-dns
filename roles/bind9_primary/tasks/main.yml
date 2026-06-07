@@ -72,7 +72,7 @@
     mode: "0644"
   loop: "{{ dns_zones }}"
   vars:
-    zone_data: "{{ lookup('file', playbook_dir + '/' + item.file) | from_yaml }}"
+    zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
   notify: reload bind9
 
 - name: Verifica sintassi zone files

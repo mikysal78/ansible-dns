@@ -40,6 +40,10 @@ acme_certs_dir: "/etc/ssl/acme"
 acme_reload_cmd: "systemctl reload bind9"
 
 # --- Zone da servire (lista dei file in zones/) ---
+# Directory radice del progetto dove si trovano i file zona YAML.
+# I playbook stanno in playbooks/, quindi la root è un livello sopra.
+dns_zones_dir_src: "{{ playbook_dir }}/.."
+
 dns_zones:
   - name: "example.com"
     file: "zones/example.com.yml"
