@@ -13,6 +13,10 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Playbook `proxmox.yml`, `proxmox-prepare-template.yml`, `proxmox-snapshot.yml`
 - Gruppi `proxmox` e `openwrt_routers` nell'inventory
 - Sezione README per uso VM OVH come secondari (firewall Edge, Anti-DDoS)
+- Aggiunto requirements.txt per cache pip nella CI
+- CI: fix cache pip (cache-dependency-path), molecule-plugins[docker]
+- CI: immagine molecule geerlingguy/docker-debian13-ansible con systemd
+- CI: check vault.yml corretto per file escluso da git
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

@@ -1,6 +1,8 @@
 ---
 # molecule/default/prepare.yml
-# Prepara i container Debian Trixie per i test
+# L'immagine geerlingguy/docker-debian13-ansible ha già systemd, Python,
+# sudo e Ansible preinstallati. Installiamo solo i pacchetti di rete
+# necessari ai test (nftables, iproute2) non presenti di default.
 
 - name: Prepara container di test
   hosts: all
@@ -12,16 +14,15 @@
       ansible.builtin.wait_for_connection:
         timeout: 60
 
-    - name: Installa pacchetti base per i test
-      ansible.builtin.raw: |
-        apt-get update -qq && \
-        apt-get install -y -qq \
-          python3 python3-apt \
-          systemd systemd-sysv \
-          sudo curl iproute2 \
-          nftables procps \
-          2>/dev/null
-      changed_when: true
+    - name: Aggiorna cache apt
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
 
-    - name: Gather facts dopo installazione Python
-      ansible.builtin.setup:
+    - name: Installa pacchetti di rete per i test
+      ansible.builtin.apt:
+        name:
+          - nftables
+          - iproute2
+          - procps
+        state: present

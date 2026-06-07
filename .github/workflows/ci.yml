@@ -33,6 +33,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Installa dipendenze
         run: |
@@ -66,6 +67,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Installa dipendenze
         run: pip install ansible-core>=2.16
@@ -130,13 +132,14 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Installa dipendenze molecule
         run: |
           pip install \
             ansible-core>=2.16 \
             molecule>=6.0 \
-            molecule-docker>=2.1 \
+            "molecule-plugins[docker]>=23.5" \
             docker>=7.0 \
             ansible-lint>=24.0
 
@@ -226,13 +229,14 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "0"   # non fallire la CI, solo segnala
 
-      - name: Verifica che vault.yml sia cifrato
+      - name: Verifica che vault.yml non sia committato in chiaro
         run: |
-          if grep -q '^\$ANSIBLE_VAULT' group_vars/all/vault.yml; then
-            echo "✓ vault.yml è cifrato correttamente"
+          if [ ! -f group_vars/all/vault.yml ]; then
+            echo "✓ vault.yml non presente nel repo (escluso da .gitignore) — corretto"
+          elif head -1 group_vars/all/vault.yml | grep -q '^\$ANSIBLE_VAULT'; then
+            echo "✓ vault.yml presente e cifrato correttamente"
           else
-            echo "⚠ ATTENZIONE: group_vars/all/vault.yml non è cifrato!"
-            echo "  Esegui: ansible-vault encrypt group_vars/all/vault.yml"
+            echo "✗ ERRORE: group_vars/all/vault.yml è committato IN CHIARO!"
+            echo "  Rimuovilo dal repo o cifralo: ansible-vault encrypt group_vars/all/vault.yml"
             exit 1
           fi
-        continue-on-error: true

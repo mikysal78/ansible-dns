@@ -13,35 +13,32 @@ driver:
 
 platforms:
   - name: dns-primary-test
-    image: "debian:trixie"
+    image: "geerlingguy/docker-debian13-ansible:latest"
     pre_build_image: true
-    privileged: false
-    capabilities:
-      - NET_ADMIN
-      - SYS_PTRACE
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    privileged: true
     command: "/lib/systemd/systemd"
     cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     tmpfs:
       - /run
-      - /tmp
+      - /run/lock
     environment:
       DEBIAN_FRONTEND: noninteractive
     groups:
       - dns_primary
 
   - name: dns-secondary-test
-    image: "debian:trixie"
+    image: "geerlingguy/docker-debian13-ansible:latest"
     pre_build_image: true
-    privileged: false
-    capabilities:
-      - NET_ADMIN
+    privileged: true
     command: "/lib/systemd/systemd"
     cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     tmpfs:
       - /run
-      - /tmp
+      - /run/lock
     environment:
       DEBIAN_FRONTEND: noninteractive
     groups:
@@ -78,8 +75,12 @@ provisioner:
         bind_transfers_out: 10
         vault_tsig_secret: "dGVzdHNlY3JldGtleWZvcm1vbGVjdWxldGVzdA=="
         vault_ddns_secret: "ZGRuc3Rlc3RzZWNyZXRrZXlmb3Jtb2xlY3VsZQ=="
+        vault_proxmox_token_secret: "molecule-test-token"
+        vault_grafana_admin_password: "molecule-test-pw"
+        vault_alertmanager_smtp_password: "molecule-test-smtp"
         hardening_ssh_authorized_keys: []
         hardening_ansible_user: ansible
+        hardening_ssh_alt_port: ~
         nft_ssh_port: 22
         nft_ssh_alt_port: ~
         nft_ssh_allowed_sources: []
