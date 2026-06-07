@@ -18,7 +18,7 @@ echo " Inizializzazione repo: ${REPO_NAME}"
 echo " Remote: ${REMOTE_URL}"
 echo "============================================================"
 
-# --- Verifica che vault.yml sia cifrato ---
+# --- Verifica che vault.yml sia cifrato (se presente) ---
 if [ -f "group_vars/all/vault.yml" ]; then
   if ! head -1 group_vars/all/vault.yml | grep -q '\$ANSIBLE_VAULT'; then
     echo ""
@@ -26,7 +26,10 @@ if [ -f "group_vars/all/vault.yml" ]; then
     echo "   Esegui prima: ansible-vault encrypt group_vars/all/vault.yml"
     exit 1
   fi
-  echo "✓ vault.yml cifrato correttamente"
+  echo "✓ vault.yml cifrato correttamente (escluso da git via .gitignore)"
+else
+  echo "ℹ vault.yml non presente — verrà committato solo vault.yml.example"
+  echo "  Dopo il clone: cp vault.yml.example vault.yml && ansible-vault encrypt vault.yml"
 fi
 
 # --- Git init ---

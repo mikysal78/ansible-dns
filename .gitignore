@@ -4,13 +4,17 @@
 .vault_pass
 *.vault_pass
 
-# Secrets — mai committare
+# Secrets — mai committare il vault reale
 group_vars/all/vault.yml
 host_vars/*/vault.yml
 **/vault.yml
 
+# Ma il template .example DEVE essere committato (riferimento delle chiavi)
+!group_vars/all/vault.yml.example
+!**/vault.yml.example
+
 # Solo il template va in git, non il vault cifrato
-# Usa: ansible-vault encrypt group_vars/all/vault.yml
+# Procedura: cp vault.yml.example vault.yml && ansible-vault encrypt vault.yml
 
 # Python
 __pycache__/

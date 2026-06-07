@@ -17,6 +17,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - CI: fix cache pip (cache-dependency-path), molecule-plugins[docker]
 - CI: immagine molecule geerlingguy/docker-debian13-ansible con systemd
 - CI: check vault.yml corretto per file escluso da git
+- Aggiunto vault.yml.example come template committabile (vault reale resta escluso)
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

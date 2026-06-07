@@ -1,0 +1,34 @@
+---
+# ============================================================
+# TEMPLATE SECRETS — group_vars/all/vault.yml.example
+# ============================================================
+# NON usare questo file direttamente. Procedura:
+#
+#   1. Copia:  cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+#   2. Compila group_vars/all/vault.yml con i valori reali
+#   3. Cifra:  ansible-vault encrypt group_vars/all/vault.yml
+#
+# Il file vault.yml è escluso da git (.gitignore). Questo .example
+# resta in chiaro nel repo come riferimento delle chiavi necessarie.
+# ============================================================
+
+# BIND9 — TSIG key per zone transfer (AXFR)
+# Genera con: tsig-keygen -a hmac-sha256 axfr-key
+vault_tsig_secret: "CHANGE_ME_base64_encoded_secret=="
+
+# BIND9 — TSIG key per DDNS (router OpenWrt + acme.sh)
+# Genera con: tsig-keygen -a hmac-sha256 ddns-key
+vault_ddns_secret: "CHANGE_ME_ddns_secret_base64=="
+
+# ACME / Let's Encrypt
+vault_acme_email: "admin@example.com"
+
+# Grafana — password admin iniziale
+vault_grafana_admin_password: "CHANGE_ME_grafana_password"
+
+# Alertmanager — password SMTP per le notifiche email
+vault_alertmanager_smtp_password: "CHANGE_ME_smtp_password"
+
+# Proxmox — API Token Secret
+# Crea con: Datacenter → Permissions → API Tokens → Add
+vault_proxmox_token_secret: "CHANGE_ME_proxmox_token_secret"

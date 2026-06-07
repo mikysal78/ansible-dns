@@ -193,7 +193,8 @@ ansible-dns/
 ├── group_vars/
 │   └── all/
 │       ├── main.yml           # configurazione globale
-│       └── vault.yml          # secrets cifrati (ansible-vault)
+│       ├── vault.yml.example  # template secret (committato)
+│       └── vault.yml          # secret reali cifrati (escluso da git)
 │
 ├── zones/
 │   ├── example.com.yml
@@ -526,19 +527,22 @@ tsig-keygen -a hmac-sha256 ddns-key
 
 ### 3. Configura il vault
 
-```bash
-cat > group_vars/all/vault.yml << EOF
----
-vault_tsig_secret: "SECRET_AXFR_BASE64=="
-vault_ddns_secret: "SECRET_DDNS_BASE64=="
-vault_acme_email: "admin@example.com"
-vault_grafana_admin_password: "PASSWORD_SICURA"
-vault_alertmanager_smtp_password: "PASSWORD_SMTP"
-vault_proxmox_token_secret: "TOKEN_SECRET_PROXMOX"
-EOF
+Copia il template `vault.yml.example` e compilalo con i valori reali:
 
+```bash
+cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+
+# Modifica con i tuoi secret (TSIG, password, token Proxmox)
+$EDITOR group_vars/all/vault.yml
+
+# Cifra il file (non sarà mai committato in chiaro grazie a .gitignore)
 ansible-vault encrypt group_vars/all/vault.yml
 ```
+
+Le chiavi richieste sono documentate in `vault.yml.example`:
+`vault_tsig_secret`, `vault_ddns_secret`, `vault_acme_email`,
+`vault_grafana_admin_password`, `vault_alertmanager_smtp_password`,
+`vault_proxmox_token_secret`.
 
 ### 4. Configura l'inventory
 
