@@ -29,7 +29,7 @@
     onboot:           "{{ proxmox_onboot }}"
     protection:       "{{ proxmox_protection }}"
     # Agent
-    agent:            "enabled={{ proxmox_agent | ternary('1','0') }}"
+    agent:            "enabled={{ proxmox_agent | ternary('1', '0') }}"
     # Tag identificativo
     tags:
       - dns

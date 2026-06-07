@@ -6,6 +6,9 @@
 
 # --- SSH ---
 hardening_ssh_port: 22
+
+# Porta SSH alternativa opzionale (es. 2222). null = disabilitata.
+hardening_ssh_alt_port: ~
 hardening_ssh_permit_root: "no"
 hardening_ssh_password_auth: "no"
 hardening_ssh_pubkey_auth: "yes"

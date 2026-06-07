@@ -8,6 +8,23 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ## [Unreleased]
 
+### Aggiunto
+- Role `proxmox_vm` — provisioning VM primary su Proxmox VE via API + cloud-init
+- Playbook `proxmox.yml`, `proxmox-prepare-template.yml`, `proxmox-snapshot.yml`
+- Gruppi `proxmox` e `openwrt_routers` nell'inventory
+
+### Corretto
+- Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)
+- Variabile riservata `action` rinominata in `snap_action` (proxmox-snapshot.yml)
+- `hardening_ssh_alt_port` mancante nei defaults (usata da fail2ban)
+- Template alert Prometheus avvolti in `{% raw %}` per evitare collisione Jinja2
+- `ansible.cfg`: rimosso commento inline su vault_password_file
+- Secret in main.yml e monitoring collegati al vault invece di placeholder
+- `proxmox-prepare-template.yml`: hosts da variabile a gruppo inventory
+- Aggiunti `changed_when` ai comandi qm/rndc, jinja spacing, name[template]
+- Config ansible-lint e yamllint allineate al profilo production
+
+
 ## [1.0.0] — 2024-XX-XX
 
 ### Aggiunto

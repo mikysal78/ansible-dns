@@ -1,0 +1,24 @@
+---
+# ============================================================
+# SECRETS — group_vars/all/vault.yml
+# Cifra con: ansible-vault encrypt group_vars/all/vault.yml
+# ============================================================
+
+# BIND9 — TSIG key per zone transfer (AXFR)
+vault_tsig_secret: "CHANGE_ME_base64_encoded_secret=="
+
+# BIND9 — TSIG key per DDNS (router OpenWrt + acme.sh)
+vault_ddns_secret: "CHANGE_ME_ddns_secret_base64=="
+
+# ACME / Let's Encrypt
+vault_acme_email: "admin@example.com"
+
+# Grafana
+vault_grafana_admin_password: "CHANGE_ME_grafana_password"
+
+# Alertmanager SMTP
+vault_alertmanager_smtp_password: "CHANGE_ME_smtp_password"
+
+# Proxmox API Token Secret
+# Crea con: Datacenter → Permissions → API Tokens → Add
+vault_proxmox_token_secret: "CHANGE_ME_proxmox_token_secret"

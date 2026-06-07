@@ -19,14 +19,15 @@ dns_secondary_ips:
 
 # --- TSIG key per trasferimenti sicuri ---
 # Genera con: tsig-keygen -a hmac-sha256 axfr-key
+# Il secret vero è in group_vars/all/vault.yml (cifrato)
 dns_tsig_key_name: "axfr-key"
 dns_tsig_algorithm: "hmac-sha256"
-dns_tsig_secret: "CHANGE_ME_base64_encoded_secret=="   # vault-encrypt questo!
+dns_tsig_secret: "{{ vault_tsig_secret }}"
 
 # --- DDNS (per router OpenWrt) ---
 ddns_key_name: "ddns-key"
 ddns_algorithm: "hmac-sha256"
-ddns_secret: "CHANGE_ME_ddns_secret_base64=="          # vault-encrypt questo!
+ddns_secret: "{{ vault_ddns_secret }}"
 ddns_zone: "dyn.example.com"
 ddns_ttl: 60
 

@@ -1,3 +1,4 @@
+{% raw %}
 # /opt/prometheus/rules/dns.yml
 # Regole alert DNS — Generato da Ansible
 
@@ -95,3 +96,4 @@ groups:
         annotations:
           summary: "CRITICO: chiave DNSSEC scade in meno di 24h — {{ $labels.zone }}"
           description: "Azione immediata richiesta per rinnovare la chiave DNSSEC di {{ $labels.zone }}."
+{% endraw %}

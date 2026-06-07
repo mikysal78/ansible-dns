@@ -6,19 +6,19 @@
 # Uso:
 #   # Crea snapshot
 #   ansible-playbook playbooks/proxmox-snapshot.yml \
-#     --ask-vault-pass -e "action=create snap_name=pre-deploy-dns"
+#     --ask-vault-pass -e "snap_action=create snap_name=pre-deploy-dns"
 #
 #   # Lista snapshot
 #   ansible-playbook playbooks/proxmox-snapshot.yml \
-#     --ask-vault-pass -e "action=list"
+#     --ask-vault-pass -e "snap_action=list"
 #
 #   # Rollback a snapshot
 #   ansible-playbook playbooks/proxmox-snapshot.yml \
-#     --ask-vault-pass -e "action=rollback snap_name=pre-deploy-dns"
+#     --ask-vault-pass -e "snap_action=rollback snap_name=pre-deploy-dns"
 #
 #   # Elimina snapshot
 #   ansible-playbook playbooks/proxmox-snapshot.yml \
-#     --ask-vault-pass -e "action=delete snap_name=pre-deploy-dns"
+#     --ask-vault-pass -e "snap_action=delete snap_name=pre-deploy-dns"
 # ============================================================
 
 - name: "Proxmox — Gestione snapshot VM DNS"
@@ -27,7 +27,7 @@
   gather_facts: true
 
   vars:
-    action:    "list"     # create | list | rollback | delete
+    snap_action:    "list"     # create | list | rollback | delete
     snap_name: "manual-{{ ansible_date_time.date }}"
     snap_desc: "Snapshot manuale — {{ ansible_date_time.iso8601 }}"
 
@@ -42,7 +42,7 @@
           Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ vault_proxmox_token_secret }}"
         validate_certs: "{{ proxmox_verify_ssl }}"
       register: snapshots_list
-      when: action == "list"
+      when: snap_action == "list"
 
     - name: Mostra snapshot
       ansible.builtin.debug:
@@ -52,7 +52,7 @@
           - {{ snap.name | ljust(30) }} {{ snap.description | default('') }}
             Creato: {{ snap.snaptime | default('N/A') }}
           {% endfor %}
-      when: action == "list"
+      when: snap_action == "list"
 
     # --- CREA ---
     - name: Crea snapshot
@@ -68,13 +68,13 @@
         vmstate:          false
         state:            present
         validate_certs:   "{{ proxmox_verify_ssl }}"
-      when: action == "create"
+      when: snap_action == "create"
       register: snap_create
 
     - name: Conferma creazione snapshot
       ansible.builtin.debug:
         msg: "Snapshot '{{ snap_name }}' creato su VMID {{ proxmox_primary_vmid }}"
-      when: action == "create" and snap_create.changed
+      when: snap_action == "create" and snap_create.changed
 
     # --- ROLLBACK ---
     - name: "Conferma rollback (operazione distruttiva)"
@@ -83,7 +83,7 @@
           ATTENZIONE: rollback a '{{ snap_name }}' su VM {{ proxmox_primary_name }}.
           Lo stato corrente della VM verrà PERSO.
           Premi INVIO per continuare o Ctrl+C per annullare.
-      when: action == "rollback"
+      when: snap_action == "rollback"
 
     - name: Ferma VM prima del rollback
       community.general.proxmox_kvm:
@@ -97,7 +97,7 @@
         state:            stopped
         force:            true
         validate_certs:   "{{ proxmox_verify_ssl }}"
-      when: action == "rollback"
+      when: snap_action == "rollback"
 
     - name: Esegui rollback snapshot
       ansible.builtin.uri:
@@ -107,7 +107,7 @@
           Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ vault_proxmox_token_secret }}"
         validate_certs: "{{ proxmox_verify_ssl }}"
       register: rollback_task
-      when: action == "rollback"
+      when: snap_action == "rollback"
 
     - name: Attendi completamento rollback
       ansible.builtin.uri:
@@ -120,7 +120,7 @@
       retries: 30
       delay: 5
       until: rollback_status.json.data.status == "stopped"
-      when: action == "rollback"
+      when: snap_action == "rollback"
 
     - name: Riavvia VM dopo rollback
       community.general.proxmox_kvm:
@@ -133,7 +133,7 @@
         vmid:             "{{ proxmox_primary_vmid }}"
         state:            started
         validate_certs:   "{{ proxmox_verify_ssl }}"
-      when: action == "rollback"
+      when: snap_action == "rollback"
 
     # --- ELIMINA ---
     - name: Elimina snapshot
@@ -147,4 +147,4 @@
         snapname:         "{{ snap_name }}"
         state:            absent
         validate_certs:   "{{ proxmox_verify_ssl }}"
-      when: action == "delete"
+      when: snap_action == "delete"

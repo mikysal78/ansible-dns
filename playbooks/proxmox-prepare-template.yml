@@ -18,7 +18,7 @@
 # ============================================================
 
 - name: "Proxmox — Prepara template Debian Trixie cloud-init"
-  hosts: "{{ proxmox_host }}"
+  hosts: proxmox
   gather_facts: true
   become: true
 
@@ -40,7 +40,7 @@
       changed_when: false
       failed_when: false
 
-    - name: "Template VMID {{ template_vmid }} già presente — skip"
+    - name: Informa che il template è già presente
       ansible.builtin.debug:
         msg: "Template {{ template_name }} (VMID {{ template_vmid }}) già presente. Niente da fare."
       when: template_exists.rc == 0
@@ -73,6 +73,7 @@
           --run-command 'ln -sf /etc/machine-id /var/lib/dbus/machine-id'
           --selinux-relabel
       when: template_exists.rc != 0
+      changed_when: true
       environment:
         LIBGUESTFS_BACKEND: direct
 
@@ -91,6 +92,7 @@
           --description "Template Debian Trixie cloud-init — generato da Ansible"
           --tags template,debian,trixie,cloudinit
       when: template_exists.rc != 0
+      changed_when: true
 
     - name: Importa disco cloud come scsi0
       ansible.builtin.command:
@@ -100,6 +102,7 @@
           {{ template_storage }}
           --format qcow2
       when: template_exists.rc != 0
+      changed_when: true
       register: import_disk
 
     - name: Configura scsi0 come disco di avvio
@@ -111,6 +114,7 @@
           --boot c
           --bootdisk scsi0
       when: template_exists.rc != 0
+      changed_when: true
 
     - name: Aggiungi drive cloud-init
       ansible.builtin.command:
@@ -120,16 +124,19 @@
           --serial0 socket
           --vga serial0
       when: template_exists.rc != 0
+      changed_when: true
 
     - name: Abilita qemu-guest-agent sul template
       ansible.builtin.command:
         cmd: "qm set {{ template_vmid }} --agent enabled=1"
       when: template_exists.rc != 0
+      changed_when: true
 
     - name: Converti VM in template
       ansible.builtin.command:
         cmd: "qm template {{ template_vmid }}"
       when: template_exists.rc != 0
+      changed_when: true
 
     - name: Pulizia immagine scaricata
       ansible.builtin.file:

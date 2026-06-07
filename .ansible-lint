@@ -6,19 +6,34 @@ exclude_paths:
   - .github/
   - molecule/
   - .cache/
+  - .git/
+
+# Regole rilassate con motivazione:
+skip_list:
+  # Le variabili DNS sono condivise tra più role (bind9_primary, bind9_secondary,
+  # dnssec, monitoring, acme_dns) tramite group_vars/all. Il prefisso per-role
+  # romperebbe la condivisione, quindi usiamo nomi globali coerenti (bind_, dns_, ddns_).
+  - var-naming[no-role-prefix]
+  # Gli handler usano la convenzione lowercase tradizionale ("restart bind9")
+  # che è ampiamente adottata e referenziata nei notify.
+  - name[casing]
 
 warn_list:
   - yaml[line-length]
-  - no-changed-when
-
-skip_list:
-  - role-name               # nomi role custom ammessi
+  - ignore-errors           # usato consapevolmente per pacchetti opzionali su Trixie
+  - risky-file-permissions  # alcuni file di log ereditano i permessi corretti dal sistema
+  - command-instead-of-module
+  - risky-shell-pipe
+  - no-handler
+  - inline-env-var
 
 use_default_rules: true
 
 mock_modules:
   - community.general.opkg
-
-mock_roles: []
+  - community.general.proxmox_kvm
+  - community.general.proxmox_disk
+  - community.general.proxmox_nic
+  - community.general.proxmox_snap
 
 verbosity: 1

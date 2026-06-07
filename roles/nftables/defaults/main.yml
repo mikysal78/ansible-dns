@@ -18,6 +18,13 @@ nft_ssh_allowed_sources: []
 # Viene sovrascritto da dns_primary_ip in group_vars
 nft_primary_ip: "{{ dns_primary_ip }}"
 
+# IP pubblici dei router OpenWrt autorizzati al DDNS sul primary.
+# Lasciare vuoto se i router hanno IP dinamico (l'autenticazione TSIG
+# protegge comunque l'aggiornamento). Popolare se gli IP sono fissi.
+ddns_allowed_sources: []
+#  - "203.0.113.100"   # router-home
+#  - "203.0.113.101"   # router-office
+
 # Porte extra da aprire (vuoto = niente)
 nft_extra_tcp_ports: []
 nft_extra_udp_ports: []

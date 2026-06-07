@@ -1,3 +1,4 @@
+{% raw %}
 # /opt/prometheus/rules/system.yml
 # Regole alert sistema — Generato da Ansible
 
@@ -82,3 +83,4 @@ groups:
         annotations:
           summary: "Errori di rete su {{ $labels.instance }}"
           description: "{{ $value | humanize }} errori di rete al secondo su {{ $labels.device }} / {{ $labels.instance }}."
+{% endraw %}

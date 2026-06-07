@@ -181,7 +181,7 @@ ansible-dns/
 ├── .yamllint
 ├── .gitignore
 ├── ansible.cfg
-├── requirements.yml           # community.general, ansible.posix, community.proxmox
+├── requirements.yml           # community.general, ansible.posix
 ├── README.md
 ├── LICENSE
 ├── CHANGELOG.md
@@ -361,19 +361,19 @@ ansible-playbook playbooks/proxmox.yml --ask-vault-pass
 ```bash
 # Lista tutti gli snapshot
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "action=list"
+  --ask-vault-pass -e "snap_action=list"
 
 # Crea snapshot manuale (prima del deploy DNS)
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "action=create snap_name=pre-deploy-dns"
+  --ask-vault-pass -e "snap_action=create snap_name=pre-deploy-dns"
 
 # Rollback (con conferma interattiva)
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "action=rollback snap_name=pre-deploy-dns"
+  --ask-vault-pass -e "snap_action=rollback snap_name=pre-deploy-dns"
 
 # Elimina snapshot
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "action=delete snap_name=pre-deploy-dns"
+  --ask-vault-pass -e "snap_action=delete snap_name=pre-deploy-dns"
 ```
 
 ### Configurazione Proxmox (`group_vars/all/main.yml`)
@@ -548,7 +548,7 @@ ansible-playbook playbooks/proxmox.yml --ask-vault-pass
 
 # 3. Snapshot pre-deploy (sicurezza)
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "action=create snap_name=pre-deploy-dns"
+  --ask-vault-pass -e "snap_action=create snap_name=pre-deploy-dns"
 
 # 4. Deploy infrastruttura DNS completa
 ansible-playbook playbooks/site.yml --ask-vault-pass
@@ -849,7 +849,7 @@ ansible-playbook playbooks/dnssec-status.yml --ask-vault-pass
 
 # Snapshot prima di un'operazione rischiosa
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "action=create snap_name=pre-manutenzione"
+  --ask-vault-pass -e "snap_action=create snap_name=pre-manutenzione"
 ```
 
 ### Aggiornare BIND9
@@ -862,7 +862,7 @@ dig @203.0.113.10 example.com SOA
 
 # Poi primary (crea snapshot prima)
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "action=create snap_name=pre-bind9-upgrade"
+  --ask-vault-pass -e "snap_action=create snap_name=pre-bind9-upgrade"
 ansible dns_primary -m apt -a "name=bind9 state=latest" --ask-vault-pass
 ansible dns_primary -m command -a "systemctl restart bind9" --ask-vault-pass
 

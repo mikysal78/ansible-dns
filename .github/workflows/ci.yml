@@ -78,21 +78,35 @@ jobs:
           ansible-playbook playbooks/site.yml --syntax-check \
             -i inventory/hosts.yml \
             -e @group_vars/all/main.yml \
-            -e "vault_tsig_secret=test vault_ddns_secret=test"
+            -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
       - name: Syntax check — update-zones.yml
         run: |
           ansible-playbook playbooks/update-zones.yml --syntax-check \
             -i inventory/hosts.yml \
             -e @group_vars/all/main.yml \
-            -e "vault_tsig_secret=test vault_ddns_secret=test"
+            -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
       - name: Syntax check — dnssec-status.yml
         run: |
           ansible-playbook playbooks/dnssec-status.yml --syntax-check \
             -i inventory/hosts.yml \
             -e @group_vars/all/main.yml \
-            -e "vault_tsig_secret=test vault_ddns_secret=test"
+            -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
+
+      - name: Syntax check — proxmox.yml
+        run: |
+          ansible-playbook playbooks/proxmox.yml --syntax-check \
+            -i inventory/hosts.yml \
+            -e @group_vars/all/main.yml \
+            -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
+
+      - name: Syntax check — proxmox-snapshot.yml
+        run: |
+          ansible-playbook playbooks/proxmox-snapshot.yml --syntax-check \
+            -i inventory/hosts.yml \
+            -e @group_vars/all/main.yml \
+            -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
   # ============================================================
   # Job 3: Molecule — test roles in Docker

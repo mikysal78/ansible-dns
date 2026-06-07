@@ -18,7 +18,7 @@
   delegate_to: localhost
   register: vm_start
 
-- name: "Attendi che la VM risponda su SSH ({{ proxmox_vm_start_timeout }}s)"
+- name: Attendi che la VM risponda su SSH entro timeout (secondi) {{ proxmox_vm_start_timeout }}
   ansible.builtin.wait_for:
     host:    "{{ proxmox_primary_ip }}"
     port:    22
@@ -38,6 +38,7 @@
   retries: 12
   delay: 15
   until: cloudinit_wait.rc == 0
+  changed_when: false
 
 - name: Verifica che qemu-guest-agent risponda
   ansible.builtin.uri:
