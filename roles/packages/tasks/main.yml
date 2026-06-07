@@ -51,12 +51,19 @@
     line: "MailTo = root"
     create: true
 
+- name: Verifica se BIND9 è già installato
+  ansible.builtin.stat:
+    path: /usr/sbin/named
+  register: named_binary
+
 - name: Mostra versione BIND9 installata
   ansible.builtin.command:
     cmd: named -v
   register: bind_version
   changed_when: false
+  when: named_binary.stat.exists
 
 - name: Info versione
   ansible.builtin.debug:
     msg: "BIND9: {{ bind_version.stdout }}"
+  when: named_binary.stat.exists and bind_version.stdout is defined

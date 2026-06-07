@@ -22,6 +22,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Fix Molecule: ANSIBLE_ROLES_PATH per trovare i role dalla cartella scenario
 - Fix bug lookup zone: dns_zones_dir_src punta alla root (site.yml falliva)
 - molecule/default/requirements.yml per dependency Galaxy
+- Fix: check versione BIND in packages reso condizionale (named non ancora installato)
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)
