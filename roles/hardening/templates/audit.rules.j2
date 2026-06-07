@@ -1,0 +1,117 @@
+## /etc/audit/rules.d/99-hardening.rules
+## Generato da Ansible — NON MODIFICARE MANUALMENTE
+## Regole ispirate a CIS Benchmark Debian
+
+# Elimina tutte le regole preesistenti
+-D
+
+# Buffer size (aumentare se il sistema è sotto stress)
+-b 8192
+
+# Failure mode: 1=log, 2=panic
+-f 1
+
+# ============================================================
+# Modifiche all'identità utente
+# ============================================================
+-w /etc/passwd     -p wa -k identity
+-w /etc/shadow     -p wa -k identity
+-w /etc/group      -p wa -k identity
+-w /etc/gshadow    -p wa -k identity
+-w /etc/sudoers    -p wa -k identity
+-w /etc/sudoers.d/ -p wa -k identity
+
+# ============================================================
+# Modifiche alla configurazione di rete
+# ============================================================
+-a always,exit -F arch=b64 -S sethostname -S setdomainname -k system-locale
+-a always,exit -F arch=b32 -S sethostname -S setdomainname -k system-locale
+-w /etc/issue       -p wa -k system-locale
+-w /etc/issue.net   -p wa -k system-locale
+-w /etc/hosts       -p wa -k system-locale
+-w /etc/network/    -p wa -k system-locale
+
+# ============================================================
+# Politiche di sicurezza e PAM
+# ============================================================
+-w /etc/apparmor/       -p wa -k MAC-policy
+-w /etc/apparmor.d/     -p wa -k MAC-policy
+-w /etc/pam.d/          -p wa -k pam
+-w /etc/security/limits.conf -p wa -k pam
+
+# ============================================================
+# Login e logout
+# ============================================================
+-w /var/log/lastlog  -p wa -k logins
+-w /var/run/faillock -p wa -k logins
+-w /var/log/wtmp     -p wa -k logins
+-w /var/log/btmp     -p wa -k logins
+
+# ============================================================
+# Gestione sessioni
+# ============================================================
+-w /var/run/utmp -p wa -k session
+
+# ============================================================
+# Modifiche ai permessi file (chmod, chown, ecc.)
+# ============================================================
+-a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -F auid>=1000 -F auid!=4294967295 -k perm_mod
+-a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -F auid>=1000 -F auid!=4294967295 -k perm_mod
+-a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -F auid>=1000 -F auid!=4294967295 -k perm_mod
+-a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -F auid>=1000 -F auid!=4294967295 -k perm_mod
+
+# ============================================================
+# Accesso non autorizzato a file (tentativi falliti)
+# ============================================================
+-a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate \
+   -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate \
+   -F exit=-EPERM  -F auid>=1000 -F auid!=4294967295 -k access
+
+# ============================================================
+# Uso di mount
+# ============================================================
+-a always,exit -F arch=b64 -S mount -F auid>=1000 -F auid!=4294967295 -k mounts
+-a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=4294967295 -k mounts
+
+# ============================================================
+# Cancellazione file
+# ============================================================
+-a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat \
+   -F auid>=1000 -F auid!=4294967295 -k delete
+
+# ============================================================
+# Modifiche alle zone DNS (file critici per l'infrastruttura)
+# ============================================================
+-w /var/lib/bind/zones/ -p wa -k dns-zones
+-w /etc/bind/           -p wa -k dns-config
+-w /var/lib/bind/keys/  -p wa -k dnssec-keys
+
+# ============================================================
+# Chiamate sudo e su
+# ============================================================
+-w /bin/su   -p x -k priv_esc
+-w /usr/bin/sudo -p x -k priv_esc
+
+# ============================================================
+# Modifiche a cron
+# ============================================================
+-w /etc/cron.d/       -p wa -k cron
+-w /etc/cron.daily/   -p wa -k cron
+-w /etc/cron.weekly/  -p wa -k cron
+-w /etc/crontab       -p wa -k cron
+-w /var/spool/cron/   -p wa -k cron
+
+# ============================================================
+# Esecuzione di comandi di sistema sospetti
+# ============================================================
+-w /sbin/insmod  -p x -k modules
+-w /sbin/rmmod   -p x -k modules
+-w /sbin/modprobe -p x -k modules
+-a always,exit -F arch=b64 -S init_module -S delete_module -k modules
+
+# ============================================================
+# Immutabilità: nessuna modifica alle regole a runtime
+# DEVE essere l'ultima riga
+# ============================================================
+-e 2

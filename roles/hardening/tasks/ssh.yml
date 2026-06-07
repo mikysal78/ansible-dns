@@ -1,0 +1,54 @@
+---
+# ============================================================
+# TASK — ssh.yml
+# Hardening sshd_config con cifrari moderni
+# ============================================================
+
+- name: Assicura che openssh-server sia installato
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+
+- name: Deploy sshd_config hardenizzato
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0600"
+    validate: "sshd -t -f %s"
+  notify: restart sshd
+
+- name: Rimuovi host keys deboli (DSA, ECDSA con curve deboli)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/ssh/ssh_host_dsa_key
+    - /etc/ssh/ssh_host_dsa_key.pub
+  notify: restart sshd
+
+- name: Rigenera host key Ed25519 se non esiste
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ""
+    creates: /etc/ssh/ssh_host_ed25519_key
+  notify: restart sshd
+
+- name: Imposta permessi corretti su host keys
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "/etc/ssh/ssh_host_ed25519_key",     mode: "0600" }
+    - { path: "/etc/ssh/ssh_host_ed25519_key.pub",  mode: "0644" }
+    - { path: "/etc/ssh/ssh_host_rsa_key",          mode: "0600" }
+    - { path: "/etc/ssh/ssh_host_rsa_key.pub",      mode: "0644" }
+  failed_when: false
+
+- name: Assicura che sshd sia abilitato e avviato
+  ansible.builtin.systemd:
+    name: ssh
+    enabled: true
+    state: started

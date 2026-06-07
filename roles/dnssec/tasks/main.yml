@@ -1,0 +1,95 @@
+---
+# ============================================================
+# TASKS — dnssec
+# Configura DNSSEC con inline signing su BIND9
+# Gira solo sul PRIMARY (è lui che firma)
+# ============================================================
+
+- name: Crea directory chiavi DNSSEC
+  ansible.builtin.file:
+    path: "{{ dnssec_key_directory }}"
+    state: directory
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0700"
+
+- name: Deploy named.conf.options con dnssec-policy
+  ansible.builtin.template:
+    src: named.conf.options-dnssec.j2
+    dest: "{{ bind_config_dir }}/named.conf.options"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+    validate: "named-checkconf %s"
+  notify: reload bind9
+
+- name: Deploy named.conf.local con dnssec-policy per zona
+  ansible.builtin.template:
+    src: named.conf.local-dnssec.j2
+    dest: "{{ bind_config_dir }}/named.conf.local"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+    validate: "named-checkconf %s"
+  notify: reload bind9
+
+- name: Ricarica BIND per attivare dnssec-policy
+  ansible.builtin.systemd:
+    name: bind9
+    state: reloaded
+
+- name: Attendi generazione chiavi DNSSEC (fino a 60s)
+  ansible.builtin.wait_for:
+    path: "{{ dnssec_key_directory }}"
+    state: present
+    timeout: 60
+
+- name: Verifica che le chiavi siano state generate
+  ansible.builtin.find:
+    paths: "{{ dnssec_key_directory }}"
+    patterns: "K*.key"
+  register: dnssec_keys
+  failed_when: dnssec_keys.matched == 0
+
+- name: Mostra chiavi DNSSEC generate
+  ansible.builtin.debug:
+    msg: "Chiavi DNSSEC: {{ dnssec_keys.files | map(attribute='path') | list }}"
+
+# Estrai e mostra i DS record da pubblicare presso il registrar
+- name: Genera DS records per ogni zona
+  ansible.builtin.shell:
+    cmd: >
+      dnssec-dsfromkey -a SHA-256
+      $(ls {{ dnssec_key_directory }}/K{{ item.name }}*.key 2>/dev/null | head -1)
+    executable: /bin/bash
+  register: ds_records
+  loop: "{{ dns_zones | selectattr('ddns_enabled', 'equalto', false) | list }}"
+  changed_when: false
+  failed_when: false
+  when: dnssec_print_ds
+
+- name: ">>> DS RECORDS DA PUBBLICARE PRESSO IL REGISTRAR <<<"
+  ansible.builtin.debug:
+    msg: |
+      ================================================================
+      ZONA: {{ item.item.name }}
+      Pubblica questi DS record nel pannello del tuo registrar DNS:
+
+      {{ item.stdout | default('DS record non ancora disponibile — riprova dopo il reload') }}
+
+      ================================================================
+  loop: "{{ ds_records.results }}"
+  when: dnssec_print_ds and ds_records is defined
+
+- name: Verifica firma zone con dnssec-verify
+  ansible.builtin.command:
+    cmd: "dnssec-verify -z {{ item.name }} {{ bind_zones_dir }}/db.{{ item.name }}"
+  loop: "{{ dns_zones | selectattr('ddns_enabled', 'equalto', false) | list }}"
+  register: dnssec_verify
+  changed_when: false
+  failed_when: false   # Non fallire se la zona non è ancora firmata (primo run)
+
+- name: Mostra risultato verifica DNSSEC
+  ansible.builtin.debug:
+    var: dnssec_verify.results
+  when: ansible_verbosity >= 1

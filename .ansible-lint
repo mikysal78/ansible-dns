@@ -1,0 +1,24 @@
+# .ansible-lint
+---
+profile: production
+
+exclude_paths:
+  - .github/
+  - molecule/
+  - .cache/
+
+warn_list:
+  - yaml[line-length]
+  - no-changed-when
+
+skip_list:
+  - role-name               # nomi role custom ammessi
+
+use_default_rules: true
+
+mock_modules:
+  - community.general.opkg
+
+mock_roles: []
+
+verbosity: 1

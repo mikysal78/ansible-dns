@@ -1,0 +1,26 @@
+// named.conf.local — PRIMARY
+// Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+{% for zone in dns_zones %}
+zone "{{ zone.name }}" {
+    type master;
+    file "{{ bind_zones_dir }}/db.{{ zone.name }}";
+
+    allow-transfer { key "{{ dns_tsig_key_name }}"; };
+    notify yes;
+    also-notify {
+{% for ip in dns_secondary_ips %}
+        {{ ip }};
+{% endfor %}
+    };
+
+{% if zone.ddns_enabled | default(false) %}
+    // Zona DDNS: aggiornamenti dinamici autorizzati con chiave
+    allow-update { key "{{ ddns_key_name }}"; };
+    journal "{{ bind_zones_dir }}/db.{{ zone.name }}.jnl";
+{% else %}
+    allow-update { none; };
+{% endif %}
+};
+
+{% endfor %}

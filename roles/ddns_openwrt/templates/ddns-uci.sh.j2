@@ -1,0 +1,24 @@
+#!/bin/sh
+# Configura DDNS via UCI su OpenWrt
+# Generato da Ansible
+
+SECTION="{{ inventory_hostname }}"
+
+uci set ddns.${SECTION}=service
+uci set ddns.${SECTION}.enabled=1
+uci set ddns.${SECTION}.service_name=custom
+uci set ddns.${SECTION}.update_script=/usr/lib/ddns/update_nsupdate.sh
+uci set ddns.${SECTION}.domain="{{ ddns_hostname }}"
+uci set ddns.${SECTION}.interface="{{ ddns_interface }}"
+uci set ddns.${SECTION}.check_interval="{{ ddns_check_interval }}"
+uci set ddns.${SECTION}.check_unit=seconds
+uci set ddns.${SECTION}.force_interval="{{ ddns_force_interval }}"
+uci set ddns.${SECTION}.force_unit=hours
+uci set ddns.${SECTION}.retry_count=5
+uci set ddns.${SECTION}.retry_interval=60
+uci set ddns.${SECTION}.use_syslog=2
+uci set ddns.${SECTION}.ip_network="{{ ddns_interface }}"
+uci set ddns.${SECTION}.ip_source=network
+
+uci commit ddns
+echo "UCI DDNS configurato per ${SECTION}"

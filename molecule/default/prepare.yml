@@ -1,0 +1,27 @@
+---
+# molecule/default/prepare.yml
+# Prepara i container Debian Trixie per i test
+
+- name: Prepara container di test
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Attendi che i container siano pronti
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+
+    - name: Installa pacchetti base per i test
+      ansible.builtin.raw: |
+        apt-get update -qq && \
+        apt-get install -y -qq \
+          python3 python3-apt \
+          systemd systemd-sysv \
+          sudo curl iproute2 \
+          nftables procps \
+          2>/dev/null
+      changed_when: true
+
+    - name: Gather facts dopo installazione Python
+      ansible.builtin.setup:

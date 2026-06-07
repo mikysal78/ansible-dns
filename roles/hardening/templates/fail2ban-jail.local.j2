@@ -1,0 +1,39 @@
+# /etc/fail2ban/jail.local
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+[DEFAULT]
+backend       = {{ hardening_fail2ban_backend }}
+banaction     = nftables-multiport
+banaction_allports = nftables-allports
+ignoreip      = 127.0.0.1/8 ::1 {{ dns_primary_ip }}
+{% for ip in dns_secondary_ips %}
+               {{ ip }}
+{% endfor %}
+
+# ============================================================
+# Jail SSH
+# ============================================================
+[sshd]
+enabled   = true
+port      = {{ hardening_ssh_port }}{% if hardening_ssh_alt_port is not none %},{{ hardening_ssh_alt_port }}{% endif %}
+
+filter    = sshd
+logpath   = /var/log/auth.log
+maxretry  = {{ hardening_fail2ban_ssh_maxretry }}
+bantime   = {{ hardening_fail2ban_ssh_bantime }}
+findtime  = {{ hardening_fail2ban_ssh_findtime }}
+
+# ============================================================
+# Jail DNS flood (solo sui secondari pubblici)
+# Legge i log di named e banna IP che fanno flooding
+# ============================================================
+[named-flood]
+enabled   = {{ 'true' if 'dns_secondary' in group_names else 'false' }}
+filter    = named-flood
+logpath   = {{ bind_log_dir }}/named.log
+maxretry  = {{ hardening_fail2ban_dns_maxretry }}
+bantime   = {{ hardening_fail2ban_dns_bantime }}
+findtime  = 60s
+banaction = nftables-dns
+port      = 53
+protocol  = udp

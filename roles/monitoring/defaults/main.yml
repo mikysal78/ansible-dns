@@ -1,0 +1,62 @@
+---
+# ============================================================
+# DEFAULTS — monitoring
+# Prometheus + bind_exporter + node_exporter + Alertmanager
+# Gira sul primary; i secondari espongono solo gli exporter
+# ============================================================
+
+# --- Versioni (aggiorna qui per upgradare) ---
+prometheus_version: "2.51.2"
+node_exporter_version: "1.8.0"
+bind_exporter_version: "0.7.0"
+alertmanager_version: "0.27.0"
+grafana_version: "10.4.2"
+
+# --- Porte ---
+prometheus_port: 9090
+node_exporter_port: 9100
+bind_exporter_port: 9119
+alertmanager_port: 9093
+grafana_port: 3000
+
+# --- Directory ---
+prometheus_dir: "/opt/prometheus"
+prometheus_data_dir: "/var/lib/prometheus"
+alertmanager_dir: "/opt/alertmanager"
+alertmanager_data_dir: "/var/lib/alertmanager"
+grafana_data_dir: "/var/lib/grafana"
+
+# --- Retention ---
+prometheus_retention: "30d"
+prometheus_retention_size: "10GB"
+
+# --- Scrape interval ---
+prometheus_scrape_interval: "15s"
+prometheus_evaluation_interval: "15s"
+
+# --- Alertmanager ---
+# Configura almeno uno tra email e webhook
+alertmanager_smtp_enabled: false
+alertmanager_smtp_host: "smtp.example.com:587"
+alertmanager_smtp_from: "alerts@example.com"
+alertmanager_smtp_to: "admin@example.com"
+alertmanager_smtp_username: "alerts@example.com"
+alertmanager_smtp_password: "CHANGE_ME"   # vault-encrypt
+
+alertmanager_webhook_enabled: false
+alertmanager_webhook_url: "https://hooks.slack.com/services/CHANGE_ME"
+
+# --- Grafana ---
+grafana_admin_user: "admin"
+grafana_admin_password: "CHANGE_ME"        # vault-encrypt
+grafana_domain: "grafana.example.com"
+grafana_allow_anonymous: false
+
+# --- IP autorizzati ad accedere a Prometheus/Grafana ---
+# (nftables aprirà queste porte solo da questi IP)
+monitoring_allowed_sources:
+  - "127.0.0.1"
+  # - "10.0.0.0/8"   # rete di gestione
+
+# --- Bind exporter: porte BIND da monitorare ---
+bind_exporter_bind_stats_url: "http://localhost:8053/json/v1"

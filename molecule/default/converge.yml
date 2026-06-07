@@ -1,0 +1,18 @@
+---
+# molecule/default/converge.yml
+
+- name: Converge — primary
+  hosts: dns_primary
+  become: true
+  roles:
+    - role: packages
+    - role: bind9_primary
+    - role: nftables
+
+- name: Converge — secondary
+  hosts: dns_secondary
+  become: true
+  roles:
+    - role: packages
+    - role: bind9_secondary
+    - role: nftables

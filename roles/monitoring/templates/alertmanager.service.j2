@@ -1,0 +1,25 @@
+[Unit]
+Description=Alertmanager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alertmanager
+Group=alertmanager
+ExecStart=/usr/local/bin/alertmanager \
+  --config.file={{ alertmanager_dir }}/alertmanager.yml \
+  --storage.path={{ alertmanager_data_dir }} \
+  --web.listen-address="127.0.0.1:{{ alertmanager_port }}" \
+  --log.level=warn
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths={{ alertmanager_data_dir }}
+
+[Install]
+WantedBy=multi-user.target

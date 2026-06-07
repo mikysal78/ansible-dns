@@ -1,0 +1,53 @@
+---
+# ============================================================
+# TASKS — hardening (orchestratore)
+# Ogni modulo è in un file separato, incluso qui in ordine
+# ============================================================
+
+- name: "[hardening] Aggiorna lista pacchetti"
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: "[hardening] Applica aggiornamenti di sicurezza"
+  ansible.builtin.apt:
+    upgrade: safe
+  register: apt_upgrade_result
+
+- name: "[hardening] Mostra pacchetti aggiornati"
+  ansible.builtin.debug:
+    msg: "{{ apt_upgrade_result.stdout_lines | default([]) }}"
+  when: apt_upgrade_result.changed
+
+- name: "[hardening] Crea utente ansible"
+  ansible.builtin.include_tasks: tasks/user.yml
+
+- name: "[hardening] Configura SSH"
+  ansible.builtin.include_tasks: tasks/ssh.yml
+
+- name: "[hardening] Configura sysctl kernel"
+  ansible.builtin.include_tasks: tasks/sysctl.yml
+
+- name: "[hardening] Hardening filesystem"
+  ansible.builtin.include_tasks: tasks/filesystem.yml
+
+- name: "[hardening] Disabilita servizi inutili"
+  ansible.builtin.include_tasks: tasks/services.yml
+
+- name: "[hardening] Configura sudo"
+  ansible.builtin.include_tasks: tasks/sudo.yml
+
+- name: "[hardening] Configura auditd"
+  ansible.builtin.include_tasks: tasks/auditd.yml
+
+- name: "[hardening] Configura banner e MOTD"
+  ansible.builtin.include_tasks: tasks/banner.yml
+
+- name: "[hardening] Configura fail2ban"
+  ansible.builtin.include_tasks: tasks/fail2ban.yml
+
+- name: "[hardening] Configura rkhunter"
+  ansible.builtin.include_tasks: tasks/rkhunter.yml
+
+- name: "[hardening] Configura unattended-upgrades"
+  ansible.builtin.include_tasks: tasks/unattended_upgrades.yml

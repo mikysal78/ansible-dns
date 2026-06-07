@@ -1,0 +1,81 @@
+---
+# ============================================================
+# TASKS — nftables
+# Applicato su: primary (locale) e secondari (VPS pubblici)
+# ============================================================
+
+- name: Installa nftables
+  ansible.builtin.apt:
+    name:
+      - nftables
+      - conntrack
+    state: present
+    update_cache: true
+
+- name: Abilita e avvia nftables
+  ansible.builtin.systemd:
+    name: nftables
+    enabled: true
+    state: started
+
+- name: Rimuovi eventuali regole iptables legacy
+  ansible.builtin.apt:
+    name:
+      - iptables
+      - ip6tables
+    state: absent
+  ignore_errors: true
+
+- name: Crea directory configurazione nftables
+  ansible.builtin.file:
+    path: /etc/nftables.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Deploy ruleset nftables principale
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0600"
+    validate: "nft -c -f %s"
+  notify: reload nftables
+
+- name: Deploy regole specifiche per ruolo DNS
+  ansible.builtin.template:
+    src: "nftables-dns-{{ 'primary' if 'dns_primary' in group_names else 'secondary' }}.nft.j2"
+    dest: /etc/nftables.d/dns.nft
+    owner: root
+    group: root
+    mode: "0600"
+    validate: "nft -c -f %s"
+  notify: reload nftables
+
+- name: Deploy regole anti-amplification UDP
+  ansible.builtin.template:
+    src: nftables-anti-amplification.nft.j2
+    dest: /etc/nftables.d/anti-amplification.nft
+    owner: root
+    group: root
+    mode: "0600"
+    validate: "nft -c -f %s"
+  notify: reload nftables
+
+- name: Applica configurazione nftables
+  ansible.builtin.command:
+    cmd: nft -f /etc/nftables.conf
+  changed_when: false
+
+- name: Verifica stato nftables
+  ansible.builtin.command:
+    cmd: nft list ruleset
+  register: nft_status
+  changed_when: false
+
+- name: Mostra ruleset attivo
+  ansible.builtin.debug:
+    var: nft_status.stdout_lines
+  when: ansible_verbosity >= 1

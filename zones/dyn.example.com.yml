@@ -1,0 +1,42 @@
+---
+# ============================================================
+# ZONA DDNS: dyn.example.com
+# Record aggiornati dinamicamente dai router OpenWrt
+# ============================================================
+
+zone:
+  name: "dyn.example.com"
+  ttl: 60                # TTL basso per aggiornamenti rapidi
+
+  soa:
+    primary_ns: "ns1.example.com."
+    admin:      "hostmaster.example.com."
+    serial:     1
+    refresh:    300
+    retry:      60
+    expire:     3600
+    minimum:    60
+
+  ns:
+    - "ns1.example.com."
+    - "ns2.example.com."
+
+  # Record statici iniziali (i router aggiorneranno gli IP via nsupdate)
+  a:
+    - name: "router-home"
+      ip: "0.0.0.0"          # placeholder, sovrascritto da DDNS
+      ttl: 60
+    - name: "router-office"
+      ip: "0.0.0.0"
+      ttl: 60
+    - name: "router-branch"
+      ip: "0.0.0.0"
+      ttl: 60
+
+  # Nessun record fisso oltre NS/SOA
+  cname: []
+  mx: []
+  txt: []
+  srv: []
+  caa: []
+  tlsa: []

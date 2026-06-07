@@ -1,0 +1,112 @@
+---
+# molecule/default/verify.yml
+# Verifica che i roles abbiano prodotto la configurazione attesa
+
+- name: Verifica DNS Primary
+  hosts: dns_primary
+  become: true
+  tasks:
+
+    - name: Verifica che BIND9 sia attivo
+      ansible.builtin.service_facts:
+    - name: Assert BIND9 running
+      ansible.builtin.assert:
+        that: ansible_facts.services['bind9.service'].state == 'running'
+        fail_msg: "BIND9 non è in esecuzione sul primary"
+
+    - name: Verifica file di configurazione BIND presenti
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: bind_files
+      loop:
+        - /etc/bind/named.conf.options
+        - /etc/bind/named.conf.local
+        - /etc/bind/tsig-axfr.key
+        - /etc/bind/ddns.key
+    - name: Assert file BIND presenti
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: "File mancante: {{ item.item }}"
+      loop: "{{ bind_files.results }}"
+
+    - name: Verifica zone file generata
+      ansible.builtin.stat:
+        path: /var/lib/bind/zones/db.example.com
+      register: zone_file
+    - name: Assert zone file presente
+      ansible.builtin.assert:
+        that: zone_file.stat.exists
+        fail_msg: "Zone file db.example.com non trovato"
+
+    - name: Verifica sintassi named.conf
+      ansible.builtin.command:
+        cmd: named-checkconf /etc/bind/named.conf
+      changed_when: false
+
+    - name: Verifica che named ascolti solo su localhost/primary IP
+      ansible.builtin.command:
+        cmd: ss -ulnp
+      register: ss_output
+      changed_when: false
+    - name: Assert named non esposto su 0.0.0.0
+      ansible.builtin.assert:
+        that: "'0.0.0.0:53' not in ss_output.stdout"
+        fail_msg: "BIND9 sta ascoltando su tutte le interfacce (dovrebbe essere hidden)"
+
+    - name: Verifica nftables attivo
+      ansible.builtin.command:
+        cmd: nft list ruleset
+      register: nft_rules
+      changed_when: false
+    - name: Assert regole nftables presenti
+      ansible.builtin.assert:
+        that:
+          - "'dns_flood' in nft_rules.stdout"
+          - "'dns_primary' in nft_rules.stdout"
+        fail_msg: "Regole nftables DNS mancanti"
+
+    - name: Verifica permessi file sensibili
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      register: sensitive_files
+      loop:
+        - { path: "/etc/bind/tsig-axfr.key", mode: "0640" }
+        - { path: "/etc/bind/ddns.key",      mode: "0640" }
+        - { path: "/etc/ssh/sshd_config",    mode: "0600" }
+    - name: Assert permessi corretti
+      ansible.builtin.assert:
+        that: item.stat.mode == item.item.mode
+        fail_msg: "Permessi errati su {{ item.item.path }}: {{ item.stat.mode }} (atteso {{ item.item.mode }})"
+      loop: "{{ sensitive_files.results }}"
+
+- name: Verifica DNS Secondary
+  hosts: dns_secondary
+  become: true
+  tasks:
+
+    - name: Verifica che BIND9 sia attivo sul secondary
+      ansible.builtin.service_facts:
+    - name: Assert BIND9 running secondary
+      ansible.builtin.assert:
+        that: ansible_facts.services['bind9.service'].state == 'running'
+        fail_msg: "BIND9 non è in esecuzione sul secondary"
+
+    - name: Verifica configurazione slave
+      ansible.builtin.command:
+        cmd: grep -q "type slave" /etc/bind/named.conf.local
+      changed_when: false
+      register: slave_check
+    - name: Assert zona configurata come slave
+      ansible.builtin.assert:
+        that: slave_check.rc == 0
+        fail_msg: "Il secondary non ha zone di tipo slave"
+
+    - name: Verifica che il secondary non accetti DDNS
+      ansible.builtin.command:
+        cmd: grep -q "allow-update.*none" /etc/bind/named.conf.local
+      changed_when: false
+      register: ddns_block
+    - name: Assert DDNS bloccato sul secondary
+      ansible.builtin.assert:
+        that: ddns_block.rc == 0
+        fail_msg: "Il secondary non blocca gli aggiornamenti dinamici"

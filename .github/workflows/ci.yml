@@ -1,0 +1,224 @@
+---
+# .github/workflows/ci.yml
+# CI Pipeline — ansible-lint + syntax check + molecule tests
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Esegui ogni domenica alle 02:00 UTC per rilevare regressioni
+    - cron: "0 2 * * 0"
+
+env:
+  ANSIBLE_FORCE_COLOR: "1"
+  PY_COLORS: "1"
+
+jobs:
+  # ============================================================
+  # Job 1: Lint — yamllint + ansible-lint
+  # ============================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa dipendenze
+        run: |
+          pip install \
+            ansible-core>=2.16 \
+            ansible-lint>=24.0 \
+            yamllint>=1.35
+
+      - name: Installa collections Ansible
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: yamllint
+        run: yamllint .
+
+      - name: ansible-lint
+        run: ansible-lint
+
+  # ============================================================
+  # Job 2: Syntax check su tutti i playbook
+  # ============================================================
+  syntax:
+    name: Syntax Check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa dipendenze
+        run: pip install ansible-core>=2.16
+
+      - name: Installa collections
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Syntax check — site.yml
+        run: |
+          ansible-playbook playbooks/site.yml --syntax-check \
+            -i inventory/hosts.yml \
+            -e @group_vars/all/main.yml \
+            -e "vault_tsig_secret=test vault_ddns_secret=test"
+
+      - name: Syntax check — update-zones.yml
+        run: |
+          ansible-playbook playbooks/update-zones.yml --syntax-check \
+            -i inventory/hosts.yml \
+            -e @group_vars/all/main.yml \
+            -e "vault_tsig_secret=test vault_ddns_secret=test"
+
+      - name: Syntax check — dnssec-status.yml
+        run: |
+          ansible-playbook playbooks/dnssec-status.yml --syntax-check \
+            -i inventory/hosts.yml \
+            -e @group_vars/all/main.yml \
+            -e "vault_tsig_secret=test vault_ddns_secret=test"
+
+  # ============================================================
+  # Job 3: Molecule — test roles in Docker
+  # ============================================================
+  molecule:
+    name: Molecule Tests
+    runs-on: ubuntu-latest
+    needs: syntax
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - default
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa dipendenze molecule
+        run: |
+          pip install \
+            ansible-core>=2.16 \
+            molecule>=6.0 \
+            molecule-docker>=2.1 \
+            docker>=7.0 \
+            ansible-lint>=24.0
+
+      - name: Installa collections
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Esegui Molecule scenario ${{ matrix.scenario }}
+        run: molecule test --scenario-name ${{ matrix.scenario }}
+        env:
+          MOLECULE_NO_LOG: "false"
+
+  # ============================================================
+  # Job 4: Verifica che le zone YAML siano valide
+  # ============================================================
+  validate-zones:
+    name: Validate Zone Files
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installa PyYAML
+        run: pip install pyyaml jsonschema
+
+      - name: Valida sintassi YAML zone files
+        run: |
+          python3 - << 'EOF'
+          import yaml
+          import sys
+          import os
+
+          zone_dir = "zones"
+          errors = []
+
+          required_keys = ["zone"]
+          zone_required = ["name", "ttl", "soa", "ns"]
+
+          for fname in os.listdir(zone_dir):
+              if not fname.endswith(".yml"):
+                  continue
+              fpath = os.path.join(zone_dir, fname)
+              try:
+                  with open(fpath) as f:
+                      data = yaml.safe_load(f)
+                  for key in required_keys:
+                      if key not in data:
+                          errors.append(f"{fname}: chiave '{key}' mancante")
+                  zone = data.get("zone", {})
+                  for key in zone_required:
+                      if key not in zone:
+                          errors.append(f"{fname}: zone.{key} mancante")
+                  print(f"✓ {fname}")
+              except Exception as e:
+                  errors.append(f"{fname}: {e}")
+
+          if errors:
+              print("\nErrori trovati:")
+              for e in errors:
+                  print(f"  ✗ {e}")
+              sys.exit(1)
+          else:
+              print(f"\nTutte le zone ({len(os.listdir(zone_dir))}) sono valide.")
+          EOF
+
+  # ============================================================
+  # Job 5: Security scan con trivy (secrets e CVE)
+  # ============================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy (config + secrets scan)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "0"   # non fallire la CI, solo segnala
+
+      - name: Verifica che vault.yml sia cifrato
+        run: |
+          if grep -q '^\$ANSIBLE_VAULT' group_vars/all/vault.yml; then
+            echo "✓ vault.yml è cifrato correttamente"
+          else
+            echo "⚠ ATTENZIONE: group_vars/all/vault.yml non è cifrato!"
+            echo "  Esegui: ansible-vault encrypt group_vars/all/vault.yml"
+            exit 1
+          fi
+        continue-on-error: true

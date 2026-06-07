@@ -1,0 +1,200 @@
+#!/usr/sbin/nft -f
+# ============================================================
+# /etc/nftables.conf — Ruleset principale
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+# Ruolo: {{ 'dns_primary (hidden master)' if 'dns_primary' in group_names else 'dns_secondary (VPS pubblico)' }}
+# ============================================================
+
+flush ruleset
+
+# ============================================================
+# Tabella principale: filtro IPv4 + IPv6
+# ============================================================
+table inet filter {
+
+    # ----------------------------------------------------------
+    # Set: indirizzi autorizzati SSH (opzionale)
+    # ----------------------------------------------------------
+{% if nft_ssh_allowed_sources | length > 0 %}
+    set ssh_allowed {
+        type ipv4_addr
+        flags interval
+        elements = {
+{% for src in nft_ssh_allowed_sources %}
+            {{ src }}{% if not loop.last %},{% endif %}
+
+{% endfor %}
+        }
+    }
+{% endif %}
+
+    # ----------------------------------------------------------
+    # Set: IP hidden primary
+    # ----------------------------------------------------------
+    set dns_primary {
+        type ipv4_addr
+        elements = { {{ nft_primary_ip }} }
+    }
+
+    # ----------------------------------------------------------
+    # Set: IP secondari
+    # ----------------------------------------------------------
+    set dns_secondaries {
+        type ipv4_addr
+        elements = {
+{% for ip in dns_secondary_ips %}
+            {{ ip }}{% if not loop.last %},{% endif %}
+
+{% endfor %}
+        }
+    }
+
+    # ----------------------------------------------------------
+    # Set dinamico: IP che fanno flood DNS
+    # Popolato automaticamente dalle regole rate-limit
+    # TTL: 120s, poi rimosso automaticamente
+    # ----------------------------------------------------------
+    set dns_flood {
+        type ipv4_addr
+        flags dynamic, timeout
+        timeout 120s
+    }
+
+    # ----------------------------------------------------------
+    # Set dinamico: destinazioni con risposte UDP grandi (anti-amplification)
+    # ----------------------------------------------------------
+    set amp_targets {
+        type ipv4_addr
+        flags dynamic, timeout
+        timeout 30s
+    }
+
+    # ----------------------------------------------------------
+    # Chain INPUT
+    # ----------------------------------------------------------
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        # Loopback
+        iif lo accept
+
+        # Connessioni già stabilite / correlate
+        ct state established,related accept
+
+        # Pacchetti con stato invalido → drop silenzioso
+        ct state invalid drop
+
+        # ICMP rate limited
+        ip  protocol icmp   icmp  type { echo-request, echo-reply,
+                                         destination-unreachable, time-exceeded }
+            limit rate {{ nft_icmp_rate_limit }} burst {{ nft_icmp_rate_limit_burst }} packets accept
+        ip6 nexthdr icmpv6  icmpv6 type { echo-request, echo-reply,
+                                          nd-neighbor-solicit, nd-neighbor-advert,
+                                          destination-unreachable, time-exceeded, packet-too-big }
+            limit rate {{ nft_icmp_rate_limit }} burst {{ nft_icmp_rate_limit_burst }} packets accept
+
+        # ICMP in eccesso → drop (no log, evita syslog flood)
+        ip  protocol icmp  drop
+        ip6 nexthdr icmpv6 drop
+
+        # SSH — con o senza whitelist sorgente
+{% if nft_ssh_allowed_sources | length > 0 %}
+        tcp dport {{ nft_ssh_port }} ip saddr @ssh_allowed \
+            ct state new limit rate 5/minute burst 10 packets accept
+        tcp dport {{ nft_ssh_port }} \
+            log prefix "nft-ssh-drop: " drop
+{% else %}
+        tcp dport {{ nft_ssh_port }} \
+            ct state new limit rate 10/minute burst 20 packets accept
+{% endif %}
+{% if nft_ssh_alt_port is not none %}
+{% if nft_ssh_allowed_sources | length > 0 %}
+        tcp dport {{ nft_ssh_alt_port }} ip saddr @ssh_allowed \
+            ct state new limit rate 5/minute burst 10 packets accept
+        tcp dport {{ nft_ssh_alt_port }} drop
+{% else %}
+        tcp dport {{ nft_ssh_alt_port }} \
+            ct state new limit rate 10/minute burst 20 packets accept
+{% endif %}
+{% endif %}
+
+        # --- Regole DNS specifiche per ruolo ---
+        include "/etc/nftables.d/dns.nft"
+
+        # --- Porte extra (opzionale) ---
+{% for port in nft_extra_tcp_ports %}
+        tcp dport {{ port }} accept
+{% endfor %}
+{% for port in nft_extra_udp_ports %}
+        udp dport {{ port }} accept
+{% endfor %}
+
+{% if nft_log_dropped %}
+        # Log drop (rate limited per non saturare syslog)
+        limit rate 3/second log prefix "{{ nft_log_prefix_drop }}" flags all
+{% endif %}
+        # Policy drop implicita
+    }
+
+    # ----------------------------------------------------------
+    # Chain FORWARD — non siamo un router
+    # ----------------------------------------------------------
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+    }
+
+    # ----------------------------------------------------------
+    # Chain OUTPUT — permissivo in uscita
+    # con rate-limiting risposte UDP grandi (anti-amplification)
+    # ----------------------------------------------------------
+    chain output {
+        type filter hook output priority filter; policy accept;
+
+        # Anti-amplification: limita risposte UDP/53 > 512 byte per destinazione
+        # Se un IP di destinazione riceve troppe risposte grandi → throttle
+        udp sport 53 ip length > {{ nft_dns_udp_response_maxbytes }} \
+            ip daddr @amp_targets \
+            limit rate 5/second \
+            log prefix "nft-amp-throttle: " drop
+
+        udp sport 53 ip length > {{ nft_dns_udp_response_maxbytes }} \
+            add @amp_targets { ip daddr timeout 30s }
+
+        # Rate limit globale risposte UDP grandi in uscita
+        udp sport 53 ip length > {{ nft_dns_udp_response_maxbytes }} \
+            limit rate over 200/second drop
+    }
+}
+
+# ============================================================
+# Tabella raw: anti-spoofing e ottimizzazione conntrack
+# ============================================================
+table inet raw {
+    chain prerouting {
+        type filter hook prerouting priority raw; policy accept;
+
+        # Drop pacchetti con IP sorgente riservati/bogon (anti-spoofing)
+        ip saddr {
+            0.0.0.0/8,
+            100.64.0.0/10,
+            169.254.0.0/16,
+            192.0.0.0/24,
+            192.0.2.0/24,
+            198.18.0.0/15,
+            198.51.100.0/24,
+            203.0.113.0/24,
+            240.0.0.0/4,
+            255.255.255.255/32
+        } iif != lo drop
+
+        # Bypass conntrack per DNS UDP (ottimizzazione performance)
+        # I DNS server ad alto traffico non hanno bisogno di conntrack su UDP/53
+        udp dport 53 notrack
+        udp sport 53 notrack
+    }
+
+    chain output {
+        type filter hook output priority raw; policy accept;
+        udp sport 53 notrack
+    }
+}

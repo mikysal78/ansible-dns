@@ -1,0 +1,127 @@
+---
+# ============================================================
+# ZONA: example.com
+# Formato YAML — viene renderizzato via template Jinja2
+# ============================================================
+
+zone:
+  name: "example.com"
+  ttl: 3600
+
+  soa:
+    primary_ns: "ns1.example.com."
+    admin:      "hostmaster.example.com."
+    serial:     "{{ '%Y%m%d01' | strftime }}"   # auto-data, aggiornato dal role
+    refresh:    7200
+    retry:      3600
+    expire:     1209600
+    minimum:    300
+
+  # --- Name Servers ---
+  ns:
+    - "ns1.example.com."
+    - "ns2.example.com."
+
+  # --- Record A / AAAA ---
+  a:
+    - name: "@"
+      ip: "203.0.113.10"
+      ttl: 3600
+    - name: "www"
+      ip: "203.0.113.10"
+    - name: "mail"
+      ip: "203.0.113.10"
+    - name: "ns1"
+      ip: "203.0.113.10"
+    - name: "ns2"
+      ip: "203.0.113.20"
+    - name: "vpn"
+      ip: "203.0.113.50"
+
+  aaaa:
+    - name: "@"
+      ip: "2001:db8::1"
+    - name: "www"
+      ip: "2001:db8::1"
+
+  # --- CNAME ---
+  cname:
+    - name: "ftp"
+      target: "www.example.com."
+    - name: "autodiscover"
+      target: "mail.example.com."
+    - name: "autoconfig"
+      target: "mail.example.com."
+
+  # --- MX ---
+  mx:
+    - priority: 10
+      host: "mail.example.com."
+    - priority: 20
+      host: "mail2.example.com."
+
+  # --- TXT (SPF, DKIM, DMARC, verifica dominio, ecc.) ---
+  txt:
+    - name: "@"
+      value: "v=spf1 mx a ip4:203.0.113.10 ~all"
+    - name: "@"
+      value: "google-site-verification=XXXXXXXXXXXXXX"
+    - name: "_dmarc"
+      value: "v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com; ruf=mailto:dmarc@example.com; pct=100"
+    - name: "mail._domainkey"
+      value: "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GN..."
+
+  # --- SRV ---
+  srv:
+    - name: "_sip._tcp"
+      priority: 10
+      weight: 20
+      port: 5060
+      target: "sip.example.com."
+    - name: "_imaps._tcp"
+      priority: 10
+      weight: 10
+      port: 993
+      target: "mail.example.com."
+    - name: "_submission._tcp"
+      priority: 10
+      weight: 10
+      port: 587
+      target: "mail.example.com."
+
+  # --- CAA (Certification Authority Authorization) ---
+  caa:
+    - name: "@"
+      flag: 0
+      tag: "issue"
+      value: "letsencrypt.org"
+    - name: "@"
+      flag: 0
+      tag: "issuewild"
+      value: "letsencrypt.org"
+    - name: "@"
+      flag: 0
+      tag: "iodef"
+      value: "mailto:security@example.com"
+
+  # --- TLSA (DANE) ---
+  tlsa:
+    - name: "_443._tcp.www"
+      usage: 3
+      selector: 1
+      matching: 1
+      certificate_hash: "HASH_SHA256_DEL_CERTIFICATO"
+
+  # --- SSHFP ---
+  sshfp:
+    - name: "mail"
+      algorithm: 4       # ED25519
+      type: 2            # SHA-256
+      fingerprint: "FINGERPRINT_HEX"
+
+  # --- NAPTR ---
+  naptr: []
+
+  # --- ACME challenge records (gestiti automaticamente da acme.sh) ---
+  # I record _acme-challenge.* vengono aggiunti/rimossi da acme.sh via DDNS
+  # Non inserire qui manualmente

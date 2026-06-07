@@ -1,0 +1,61 @@
+#!/bin/bash
+# /etc/update-motd.d/10-dns-server
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+HOSTNAME=$(hostname -f)
+OS=$(grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)
+KERNEL=$(uname -r)
+UPTIME=$(uptime -p)
+LOAD=$(cut -d' ' -f1-3 /proc/loadavg)
+MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
+MEM_USED=$(free -m  | awk '/^Mem:/{print $3}')
+DISK=$(df -h / | awk 'NR==2{print $3"/"$2" ("$5")"}')
+BIND_STATUS=$(systemctl is-active bind9 2>/dev/null || echo "unknown")
+NB_ZONES=$(ls /var/lib/bind/zones/db.* 2>/dev/null | wc -l)
+LAST_LOGIN=$(last -n1 -F $USER 2>/dev/null | head -1 | awk '{print $3,$4,$5,$6,$7,$8}')
+
+# Colori
+G='\033[0;32m'; Y='\033[0;33m'; R='\033[0;31m'; B='\033[0;34m'; N='\033[0m'; BOLD='\033[1m'
+
+echo ""
+echo -e "${BOLD}╔════════════════════════════════════════════════════════════╗${N}"
+echo -e "${BOLD}║  DNS Server — ${HOSTNAME}${N}"
+echo -e "${BOLD}╚════════════════════════════════════════════════════════════╝${N}"
+echo ""
+echo -e "  ${B}Sistema:${N}    ${OS}"
+echo -e "  ${B}Kernel:${N}     ${KERNEL}"
+echo -e "  ${B}Uptime:${N}     ${UPTIME}"
+echo -e "  ${B}Load:${N}       ${LOAD}"
+echo -e "  ${B}Memoria:${N}    ${MEM_USED}MB / ${MEM_TOTAL}MB"
+echo -e "  ${B}Disco /:${N}    ${DISK}"
+echo ""
+
+# Stato BIND9
+if [ "$BIND_STATUS" = "active" ]; then
+    echo -e "  ${B}BIND9:${N}      ${G}● attivo${N} — ${NB_ZONES} zone caricate"
+else
+    echo -e "  ${B}BIND9:${N}      ${R}● ${BIND_STATUS}${N}"
+fi
+
+# Stato nftables
+NFT_STATUS=$(systemctl is-active nftables 2>/dev/null || echo "unknown")
+if [ "$NFT_STATUS" = "active" ]; then
+    echo -e "  ${B}nftables:${N}   ${G}● attivo${N}"
+    # Mostra IP bannati per DNS flood (se ci sono)
+    FLOOD_IPS=$(nft list set inet filter dns_flood 2>/dev/null | grep -c 'timeout' || true)
+    [ "$FLOOD_IPS" -gt 0 ] 2>/dev/null && echo -e "  ${Y}⚠ DNS flood ban:${N} ${FLOOD_IPS} IP bloccati"
+else
+    echo -e "  ${B}nftables:${N}   ${R}● ${NFT_STATUS}${N}"
+fi
+
+# Aggiornamenti disponibili
+UPDATES=$(apt-get -s upgrade 2>/dev/null | grep -c "^Inst" || echo 0)
+if [ "$UPDATES" -gt 0 ]; then
+    echo ""
+    echo -e "  ${Y}⚠  ${UPDATES} aggiornamenti disponibili — esegui: apt upgrade${N}"
+fi
+
+# Ultimo login
+[ -n "$LAST_LOGIN" ] && echo -e "\n  ${B}Ultimo login:${N} ${LAST_LOGIN}"
+
+echo ""

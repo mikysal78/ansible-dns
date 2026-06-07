@@ -1,0 +1,8 @@
+---
+# Domini per cui emettere certificati wildcard
+# Aggiungere qui i propri domini
+acme_domains:
+  - domain: "example.com"
+    keylength: "ec-256"    # EC P-256 (consigliato) oppure "4096" per RSA
+  # - domain: "other.example.com"
+  #   keylength: "ec-256"

@@ -1,0 +1,84 @@
+# /opt/prometheus/rules/system.yml
+# Regole alert sistema — Generato da Ansible
+
+groups:
+  - name: system_health
+    rules:
+
+      - alert: NodeDown
+        expr: up{job="node"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Server {{ $labels.instance }} non raggiungibile"
+          description: "node_exporter non risponde da 2 minuti su {{ $labels.instance }}."
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU elevata su {{ $labels.instance }}"
+          description: "CPU al {{ $value | printf \"%.1f\" }}% da 10 minuti su {{ $labels.instance }}."
+
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) /
+          node_memory_MemTotal_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memoria quasi esaurita su {{ $labels.instance }}"
+          description: "Memoria al {{ $value | printf \"%.1f\" }}% su {{ $labels.instance }}."
+
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} /
+          node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spazio disco basso su {{ $labels.instance }}"
+          description: "Solo {{ $value | printf \"%.1f\" }}% di spazio libero su / in {{ $labels.instance }}."
+
+      - alert: DiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} /
+          node_filesystem_size_bytes{mountpoint="/"}) * 100 < 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICO: disco quasi pieno su {{ $labels.instance }}"
+          description: "Solo {{ $value | printf \"%.1f\" }}% di spazio libero. Il server potrebbe crashare."
+
+      - alert: SystemdServiceFailed
+        expr: node_systemd_unit_state{state="failed"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Servizio systemd in stato failed su {{ $labels.instance }}"
+          description: "Il servizio {{ $labels.name }} è in stato failed su {{ $labels.instance }}."
+
+      - alert: NTPOffsetHigh
+        expr: abs(node_timex_offset_seconds) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Orologio di sistema disallineato su {{ $labels.instance }}"
+          description: "Offset NTP di {{ $value | humanizeDuration }} su {{ $labels.instance }}. DNSSEC è sensibile al tempo."
+
+      - alert: HighNetworkErrors
+        expr: rate(node_network_receive_errs_total[5m]) + rate(node_network_transmit_errs_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Errori di rete su {{ $labels.instance }}"
+          description: "{{ $value | humanize }} errori di rete al secondo su {{ $labels.device }} / {{ $labels.instance }}."

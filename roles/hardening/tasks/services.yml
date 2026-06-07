@@ -1,0 +1,42 @@
+---
+# ============================================================
+# TASK — services.yml
+# Disabilita e stoppa servizi inutili su un DNS server
+# ============================================================
+
+- name: Disabilita servizi non necessari
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ hardening_disabled_services }}"
+  failed_when: false   # ignora se il servizio non esiste
+
+- name: Rimuovi pacchetti inutili (se installati)
+  ansible.builtin.apt:
+    name:
+      - telnet
+      - rsh-client
+      - talk
+      - xinetd
+      - nis
+      - yp-tools
+      - tftp
+      - atftpd
+      - tftpd
+      - tftpd-hpa
+    state: absent
+    purge: true
+  failed_when: false
+
+- name: Verifica che postfix non ascolti su porte esterne
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: "^inet_interfaces"
+    line: "inet_interfaces = loopback-only"
+  notify: reload postfix
+  failed_when: false
+
+- name: Disabilita IPv6 se non necessario (opzionale, commentato per default)
+  ansible.builtin.debug:
+    msg: "IPv6 mantenuto attivo — disabilitare in defaults se non necessario"

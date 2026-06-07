@@ -1,0 +1,168 @@
+---
+# ============================================================
+# DEFAULTS — hardening
+# Ogni sezione corrisponde a un task file in tasks/
+# ============================================================
+
+# --- SSH ---
+hardening_ssh_port: 22
+hardening_ssh_permit_root: "no"
+hardening_ssh_password_auth: "no"
+hardening_ssh_pubkey_auth: "yes"
+hardening_ssh_max_auth_tries: 3
+hardening_ssh_max_sessions: 5
+hardening_ssh_login_grace_time: 30
+hardening_ssh_client_alive_interval: 300
+hardening_ssh_client_alive_count_max: 2
+hardening_ssh_allow_tcp_forwarding: "no"
+hardening_ssh_x11_forwarding: "no"
+hardening_ssh_print_motd: "no"        # gestito da pam_motd
+hardening_ssh_banner: "/etc/issue.net"
+hardening_ssh_allowed_users: []        # vuoto = tutti gli utenti con chiave
+hardening_ssh_ciphers:
+  - "chacha20-poly1305@openssh.com"
+  - "aes256-gcm@openssh.com"
+  - "aes128-gcm@openssh.com"
+hardening_ssh_macs:
+  - "hmac-sha2-512-etm@openssh.com"
+  - "hmac-sha2-256-etm@openssh.com"
+hardening_ssh_kex:
+  - "curve25519-sha256"
+  - "curve25519-sha256@libssh.org"
+  - "diffie-hellman-group16-sha512"
+  - "diffie-hellman-group18-sha512"
+
+# Chiavi pubbliche SSH da autorizzare (lista di chiavi in formato authorized_keys)
+# Aggiungi le tue chiavi qui o in host_vars/
+hardening_ssh_authorized_keys: []
+# - key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host"
+#   user: ansible        # utente sul server dove aggiungere la chiave
+# - key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... admin@host"
+#   user: root
+
+# Utente non-root per accesso Ansible (creato se non esiste)
+hardening_ansible_user: "ansible"
+hardening_ansible_user_shell: "/bin/bash"
+hardening_ansible_user_groups:
+  - sudo
+
+# --- Kernel sysctl ---
+hardening_sysctl_settings:
+  # Network hardening
+  net.ipv4.ip_forward: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv4.conf.default.log_martians: 1
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.default.rp_filter: 1
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.icmp_ignore_bogus_error_responses: 1
+  net.ipv4.tcp_syncookies: 1
+  net.ipv4.tcp_syn_retries: 2
+  net.ipv4.tcp_synack_retries: 2
+  net.ipv4.tcp_max_syn_backlog: 4096
+  net.ipv4.tcp_timestamps: 0          # evita fingerprinting
+  net.ipv4.tcp_fin_timeout: 15
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
+  net.ipv6.conf.all.accept_source_route: 0
+  # Memory / exploit mitigation
+  kernel.randomize_va_space: 2         # ASLR completo
+  kernel.dmesg_restrict: 1
+  kernel.kptr_restrict: 2
+  kernel.yama.ptrace_scope: 1
+  kernel.perf_event_paranoid: 3
+  fs.suid_dumpable: 0
+  fs.protected_hardlinks: 1
+  fs.protected_symlinks: 1
+  # Performance DNS server
+  net.core.somaxconn: 65535
+  net.core.netdev_max_backlog: 65535
+  net.ipv4.udp_mem: "786432 1048576 26214400"
+
+# --- Filesystem ---
+hardening_tmp_noexec: true
+hardening_var_tmp_noexec: true
+hardening_dev_shm_noexec: true
+
+# Permessi file sensibili
+hardening_file_permissions:
+  - path: "/etc/passwd"
+    mode: "0644"
+  - path: "/etc/shadow"
+    mode: "0640"
+  - path: "/etc/gshadow"
+    mode: "0640"
+  - path: "/etc/group"
+    mode: "0644"
+  - path: "/etc/ssh/sshd_config"
+    mode: "0600"
+  - path: "/boot"
+    mode: "0700"
+
+# --- Servizi da disabilitare ---
+hardening_disabled_services:
+  - avahi-daemon
+  - cups
+  - isc-dhcp-server
+  - isc-dhcp-server6
+  - slapd
+  - nfs-server
+  - rpcbind
+  - rsync
+  - talk
+  - telnet
+  - tftp
+  - xinetd
+  - bluetooth
+
+# --- sudo ---
+hardening_sudo_log_file: "/var/log/sudo.log"
+hardening_sudo_requiretty: true
+hardening_sudo_lecture: "once"
+
+# --- auditd ---
+hardening_auditd_max_log_file: 50          # MB
+hardening_auditd_max_log_file_action: "keep_logs"
+hardening_auditd_space_left_action: "email"
+hardening_auditd_admin_space_left_action: "halt"
+hardening_auditd_action_mail_acct: "root"
+
+# --- Banner / MOTD ---
+hardening_banner_text: |
+  ╔══════════════════════════════════════════════════════════╗
+  ║          ACCESSO AUTORIZZATO ESCLUSIVAMENTE              ║
+  ║   Ogni attività è registrata e soggetta a monitoraggio   ║
+  ║          UNAUTHORIZED ACCESS IS PROHIBITED               ║
+  ╚══════════════════════════════════════════════════════════╝
+
+hardening_motd_text: |
+  Sistema: {{ ansible_hostname }}
+  OS:      {{ ansible_distribution }} {{ ansible_distribution_version }}
+  Kernel:  {{ ansible_kernel }}
+  Ruolo:   DNS {{ 'Primary (hidden master)' if 'dns_primary' in group_names else 'Secondary' }}
+
+# --- fail2ban ---
+hardening_fail2ban_ssh_maxretry: 3
+hardening_fail2ban_ssh_bantime: "1h"
+hardening_fail2ban_ssh_findtime: "10m"
+hardening_fail2ban_dns_maxretry: 100     # query/s prima del ban
+hardening_fail2ban_dns_bantime: "10m"
+hardening_fail2ban_backend: "systemd"
+
+# --- rkhunter ---
+hardening_rkhunter_cron_hour: 3
+hardening_rkhunter_cron_minute: 0
+hardening_rkhunter_mail_to: "root"
+hardening_rkhunter_allow_ssh_root_user: "no"
+
+# --- unattended-upgrades ---
+hardening_unattended_upgrades_mail: "root"
+hardening_unattended_upgrades_remove_deps: true
+hardening_unattended_upgrades_reboot: false    # mai riavviare automaticamente un DNS server!
+hardening_unattended_upgrades_reboot_time: "04:00"

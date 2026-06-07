@@ -1,0 +1,61 @@
+---
+# ============================================================
+# VARIABILI GLOBALI — group_vars/all/main.yml
+# ============================================================
+
+# --- Identità DNS ---
+dns_domain_base: "example.com"          # dominio principale
+dns_admin_email: "hostmaster@example.com"
+
+# --- IP hidden primary (usato dai secondari per AXFR) ---
+dns_primary_ip: "192.168.1.10"
+dns_primary_port: 53
+
+# --- IP pubblici dei secondari (lista) ---
+dns_secondary_ips:
+  - "203.0.113.10"
+  - "203.0.113.20"
+  # - "203.0.113.30"
+
+# --- TSIG key per trasferimenti sicuri ---
+# Genera con: tsig-keygen -a hmac-sha256 axfr-key
+dns_tsig_key_name: "axfr-key"
+dns_tsig_algorithm: "hmac-sha256"
+dns_tsig_secret: "CHANGE_ME_base64_encoded_secret=="   # vault-encrypt questo!
+
+# --- DDNS (per router OpenWrt) ---
+ddns_key_name: "ddns-key"
+ddns_algorithm: "hmac-sha256"
+ddns_secret: "CHANGE_ME_ddns_secret_base64=="          # vault-encrypt questo!
+ddns_zone: "dyn.example.com"
+ddns_ttl: 60
+
+# --- ACME / Let's Encrypt ---
+acme_email: "admin@example.com"
+acme_server: "https://acme-v02.api.letsencrypt.org/directory"  # prod
+# acme_server: "https://acme-staging-v02.api.letsencrypt.org/directory"  # staging
+acme_install_dir: "/opt/acme.sh"
+acme_certs_dir: "/etc/ssl/acme"
+acme_reload_cmd: "systemctl reload bind9"
+
+# --- Zone da servire (lista dei file in zones/) ---
+dns_zones:
+  - name: "example.com"
+    file: "zones/example.com.yml"
+    type: "master"
+    ddns_enabled: false
+  - name: "dyn.example.com"
+    file: "zones/dyn.example.com.yml"
+    type: "master"
+    ddns_enabled: true
+  - name: "113.0.203.in-addr.arpa"
+    file: "zones/203.0.113.reverse.yml"
+    type: "master"
+    ddns_enabled: false
+
+# --- Bind9 ---
+bind_user: "bind"
+bind_group: "bind"
+bind_config_dir: "/etc/bind"
+bind_zones_dir: "/var/lib/bind/zones"
+bind_log_dir: "/var/log/named"

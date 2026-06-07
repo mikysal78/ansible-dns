@@ -1,0 +1,74 @@
+---
+# ============================================================
+# TASK — filesystem.yml
+# Mount options noexec/nosuid/nodev su /tmp, /var/tmp, /dev/shm
+# Permessi file sensibili
+# ============================================================
+
+- name: Configura /tmp con noexec, nosuid, nodev
+  ansible.posix.mount:
+    path: /tmp
+    src: tmpfs
+    fstype: tmpfs
+    opts: "defaults,noexec,nosuid,nodev,size=512m"
+    state: mounted
+  when: hardening_tmp_noexec
+
+- name: Bind-mount /var/tmp → /tmp (stesse restrizioni)
+  ansible.posix.mount:
+    path: /var/tmp
+    src: /tmp
+    fstype: none
+    opts: "bind,noexec,nosuid,nodev"
+    state: mounted
+  when: hardening_var_tmp_noexec
+
+- name: Configura /dev/shm con noexec, nosuid, nodev
+  ansible.posix.mount:
+    path: /dev/shm
+    src: tmpfs
+    fstype: tmpfs
+    opts: "defaults,noexec,nosuid,nodev,size=256m"
+    state: mounted
+  when: hardening_dev_shm_noexec
+
+- name: Imposta permessi corretti su file sensibili
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ hardening_file_permissions }}"
+  failed_when: false
+
+- name: Rimuovi SUID/SGID da binari non necessari
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: "a-s"
+  loop:
+    - /usr/bin/wall
+    - /usr/bin/write
+    - /usr/bin/chfn
+    - /usr/bin/chsh
+    - /usr/bin/newgrp
+    - /usr/bin/at
+  failed_when: false
+
+- name: Assicura che /boot sia accessibile solo da root
+  ansible.builtin.file:
+    path: /boot
+    mode: "0700"
+    owner: root
+    group: root
+
+- name: Disabilita core dump per tutti gli utenti
+  ansible.builtin.lineinfile:
+    path: /etc/security/limits.conf
+    line: "* hard core 0"
+    state: present
+
+- name: Disabilita core dump via systemd
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/coredump.conf
+    regexp: "^#?Storage="
+    line: "Storage=none"
+    create: true
+  notify: reload systemd

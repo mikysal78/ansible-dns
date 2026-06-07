@@ -1,0 +1,12 @@
+# /etc/fail2ban/filter.d/named-flood.conf
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+# Rileva query flooding nei log di BIND9
+
+[Definition]
+# Formato log named: client @0x... <IP>#<port> (<query>): query: ...
+# Matcha IP che appaiono ripetutamente in query DNS
+failregex = client @\S+ <HOST>#\d+ \(.+\): query(?: \(cache\))? '.+' denied
+            client @\S+ <HOST>#\d+ \(.+\): rate limit slip
+            client @\S+ <HOST>#\d+: view \S+: query
+
+ignoreregex =

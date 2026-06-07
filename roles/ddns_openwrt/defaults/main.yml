@@ -1,0 +1,11 @@
+---
+# Hostname DDNS assegnato a questo router
+# Sovrascrivibile per ogni host nell'inventory
+ddns_hostname: "router-{{ inventory_hostname }}.{{ ddns_zone }}"
+
+# Interfaccia WAN da monitorare
+ddns_interface: "wan"
+
+# Intervallo di aggiornamento (secondi)
+ddns_check_interval: 300
+ddns_force_interval: 72   # ore — forza aggiornamento anche se IP non cambia

@@ -1,0 +1,97 @@
+---
+# ============================================================
+# TASK — grafana.yml
+# Installa Grafana e configura dashboard DNS + sistema
+# ============================================================
+
+- name: Aggiungi GPG key Grafana
+  ansible.builtin.apt_key:
+    url: https://apt.grafana.com/gpg.key
+    state: present
+
+- name: Aggiungi repository Grafana
+  ansible.builtin.apt_repository:
+    repo: "deb https://apt.grafana.com stable main"
+    state: present
+    filename: grafana
+
+- name: Installa Grafana
+  ansible.builtin.apt:
+    name: "grafana={{ grafana_version }}"
+    state: present
+    update_cache: true
+
+- name: Deploy grafana.ini
+  ansible.builtin.template:
+    src: grafana.ini.j2
+    dest: /etc/grafana/grafana.ini
+    owner: root
+    group: grafana
+    mode: "0640"
+  notify: restart grafana
+
+- name: Crea directory provisioning datasource
+  ansible.builtin.file:
+    path: /etc/grafana/provisioning/datasources
+    state: directory
+    owner: root
+    group: grafana
+    mode: "0750"
+
+- name: Crea directory provisioning dashboard
+  ansible.builtin.file:
+    path: /etc/grafana/provisioning/dashboards
+    state: directory
+    owner: root
+    group: grafana
+    mode: "0750"
+
+- name: Crea directory dashboard JSON
+  ansible.builtin.file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: "0755"
+
+- name: Deploy datasource Prometheus
+  ansible.builtin.template:
+    src: grafana-datasource.yml.j2
+    dest: /etc/grafana/provisioning/datasources/prometheus.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+  notify: restart grafana
+
+- name: Deploy provisioning dashboard config
+  ansible.builtin.template:
+    src: grafana-dashboard-provisioning.yml.j2
+    dest: /etc/grafana/provisioning/dashboards/dns.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+  notify: restart grafana
+
+- name: Deploy dashboard JSON DNS
+  ansible.builtin.template:
+    src: grafana-dashboard-dns.json.j2
+    dest: /var/lib/grafana/dashboards/dns-overview.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
+- name: Deploy dashboard JSON sistema
+  ansible.builtin.template:
+    src: grafana-dashboard-system.json.j2
+    dest: /var/lib/grafana/dashboards/system-overview.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
+- name: Abilita e avvia grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    enabled: true
+    state: started

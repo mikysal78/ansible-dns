@@ -1,0 +1,45 @@
+---
+# ============================================================
+# TASK — banner.yml
+# Login banner (pre-auth) e MOTD (post-auth)
+# ============================================================
+
+- name: Deploy banner pre-login (/etc/issue.net)
+  ansible.builtin.template:
+    src: issue.net.j2
+    dest: /etc/issue.net
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy banner locale (/etc/issue)
+  ansible.builtin.template:
+    src: issue.net.j2
+    dest: /etc/issue
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Svuota MOTD statico (sarà generato dinamicamente da pam_motd)
+  ansible.builtin.copy:
+    content: ""
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy script MOTD dinamico
+  ansible.builtin.template:
+    src: motd-dynamic.sh.j2
+    dest: /etc/update-motd.d/10-dns-server
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Rimuovi MOTD di default Debian (uname, ecc.)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/update-motd.d/10-uname
+  failed_when: false

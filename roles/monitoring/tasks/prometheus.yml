@@ -1,0 +1,97 @@
+---
+# ============================================================
+# TASK — prometheus.yml
+# Installa Prometheus sul primary con scrape di tutti i nodi
+# ============================================================
+
+- name: Crea utente sistema prometheus
+  ansible.builtin.user:
+    name: prometheus
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+
+- name: Crea directory prometheus
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0755"
+  loop:
+    - "{{ prometheus_dir }}"
+    - "{{ prometheus_data_dir }}"
+    - "{{ prometheus_dir }}/rules"
+
+- name: Scarica Prometheus
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+    mode: "0644"
+
+- name: Estrai Prometheus
+  ansible.builtin.unarchive:
+    src: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+    dest: /tmp
+    remote_src: true
+
+- name: Installa binari prometheus
+  ansible.builtin.copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: true
+  loop:
+    - prometheus
+    - promtool
+  notify: restart prometheus
+
+- name: Deploy prometheus.yml
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ prometheus_dir }}/prometheus.yml"
+    owner: prometheus
+    group: prometheus
+    mode: "0640"
+    validate: "promtool check config %s"
+  notify: reload prometheus
+
+- name: Deploy regole alert DNS
+  ansible.builtin.template:
+    src: alert_rules_dns.yml.j2
+    dest: "{{ prometheus_dir }}/rules/dns.yml"
+    owner: prometheus
+    group: prometheus
+    mode: "0640"
+    validate: "promtool check rules %s"
+  notify: reload prometheus
+
+- name: Deploy regole alert sistema
+  ansible.builtin.template:
+    src: alert_rules_system.yml.j2
+    dest: "{{ prometheus_dir }}/rules/system.yml"
+    owner: prometheus
+    group: prometheus
+    mode: "0640"
+    validate: "promtool check rules %s"
+  notify: reload prometheus
+
+- name: Deploy systemd unit prometheus
+  ansible.builtin.template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart prometheus
+
+- name: Abilita e avvia prometheus
+  ansible.builtin.systemd:
+    name: prometheus
+    enabled: true
+    state: started
+    daemon_reload: true

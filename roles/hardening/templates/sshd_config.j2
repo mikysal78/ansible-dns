@@ -1,0 +1,75 @@
+# /etc/ssh/sshd_config
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+# --- Network ---
+Port {{ hardening_ssh_port }}
+AddressFamily inet
+ListenAddress 0.0.0.0
+
+# --- Autenticazione ---
+PermitRootLogin {{ hardening_ssh_permit_root }}
+PubkeyAuthentication {{ hardening_ssh_pubkey_auth }}
+PasswordAuthentication {{ hardening_ssh_password_auth }}
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
+UsePAM yes
+
+AuthorizedKeysFile .ssh/authorized_keys
+
+# --- Tentativi e sessioni ---
+MaxAuthTries {{ hardening_ssh_max_auth_tries }}
+MaxSessions {{ hardening_ssh_max_sessions }}
+LoginGraceTime {{ hardening_ssh_login_grace_time }}
+
+# --- Keep-alive ---
+ClientAliveInterval {{ hardening_ssh_client_alive_interval }}
+ClientAliveCountMax {{ hardening_ssh_client_alive_count_max }}
+TCPKeepAlive no
+
+# --- Forwarding e tunneling (disabilitati) ---
+AllowTcpForwarding {{ hardening_ssh_allow_tcp_forwarding }}
+AllowAgentForwarding no
+AllowStreamLocalForwarding no
+GatewayPorts no
+PermitTunnel no
+X11Forwarding {{ hardening_ssh_x11_forwarding }}
+
+# --- Ambiente ---
+PermitUserEnvironment no
+AcceptEnv LANG LC_*
+
+# --- Cifrari moderni (chacha20, AES-GCM) ---
+Ciphers {{ hardening_ssh_ciphers | join(',') }}
+
+# --- MAC (solo ETM: Encrypt-then-MAC) ---
+MACs {{ hardening_ssh_macs | join(',') }}
+
+# --- KEX (scambio chiavi) ---
+KexAlgorithms {{ hardening_ssh_kex | join(',') }}
+
+# --- Host key algorithms ---
+HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+
+# --- Utenti autorizzati ---
+{% if hardening_ssh_allowed_users | length > 0 %}
+AllowUsers {{ hardening_ssh_allowed_users | join(' ') }}
+{% endif %}
+
+# --- Banner e MOTD ---
+Banner {{ hardening_ssh_banner }}
+PrintMotd {{ hardening_ssh_print_motd }}
+PrintLastLog yes
+
+# --- Logging ---
+SyslogFacility AUTH
+LogLevel VERBOSE          # logga fingerprint chiave usata
+
+# --- Sicurezza extra ---
+StrictModes yes
+IgnoreRhosts yes
+HostbasedAuthentication no
+UseDNS no                  # evita ritardi su reverse DNS
+Compression no

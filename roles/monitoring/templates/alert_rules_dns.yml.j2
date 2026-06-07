@@ -1,0 +1,97 @@
+# /opt/prometheus/rules/dns.yml
+# Regole alert DNS — Generato da Ansible
+
+groups:
+  - name: dns_availability
+    interval: 30s
+    rules:
+
+      - alert: BINDDown
+        expr: up{job=~"bind_.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BIND9 non raggiungibile su {{ $labels.instance }}"
+          description: "bind_exporter non risponde da 2 minuti su {{ $labels.instance }}. BIND9 potrebbe essere down."
+
+      - alert: BINDZoneTransferFailed
+        expr: increase(bind_zone_transfer_failure_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zone transfer fallito su {{ $labels.instance }}"
+          description: "{{ $value }} zone transfer falliti negli ultimi 5 minuti su {{ $labels.instance }}."
+
+      - alert: BINDQueryRateHigh
+        expr: rate(bind_incoming_queries_total[5m]) > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Query rate elevato su {{ $labels.instance }}"
+          description: "{{ $value | humanize }} query/s su {{ $labels.instance }} (soglia: 5000/s)."
+
+      - alert: BINDQueryRateCritical
+        expr: rate(bind_incoming_queries_total[5m]) > 20000
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Possibile attacco DDoS DNS su {{ $labels.instance }}"
+          description: "{{ $value | humanize }} query/s su {{ $labels.instance }}. Possibile attacco in corso."
+
+      - alert: BINDDNSSECValidationFailed
+        expr: increase(bind_resolver_dnssec_validation_errors_total[10m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Errori validazione DNSSEC su {{ $labels.instance }}"
+          description: "{{ $value }} errori DNSSEC validation negli ultimi 10 minuti."
+
+      - alert: BINDSerialMismatch
+        expr: |
+          max by (zone) (bind_zone_serial{role="dns_primary"}) !=
+          min by (zone) (bind_zone_serial{role="dns_secondary"})
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Serial mismatch zona {{ $labels.zone }}"
+          description: "Il serial della zona {{ $labels.zone }} non è allineato tra primary e secondari dopo 15 minuti."
+
+      - alert: BINDCacheHitRateLow
+        expr: |
+          rate(bind_resolver_cache_hits_total[10m]) /
+          (rate(bind_resolver_cache_hits_total[10m]) + rate(bind_resolver_cache_misses_total[10m])) < 0.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Cache hit rate bassa su {{ $labels.instance }}"
+          description: "Cache hit rate al {{ $value | humanizePercentage }} su {{ $labels.instance }}."
+
+  - name: dns_dnssec
+    rules:
+
+      - alert: DNSSECKeyExpiringSoon
+        expr: |
+          (bind_zone_dnssec_key_expiry_seconds - time()) < 7 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Chiave DNSSEC in scadenza — zona {{ $labels.zone }}"
+          description: "La chiave DNSSEC per {{ $labels.zone }} scade tra meno di 7 giorni."
+
+      - alert: DNSSECKeyExpiredCritical
+        expr: |
+          (bind_zone_dnssec_key_expiry_seconds - time()) < 24 * 3600
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICO: chiave DNSSEC scade in meno di 24h — {{ $labels.zone }}"
+          description: "Azione immediata richiesta per rinnovare la chiave DNSSEC di {{ $labels.zone }}."

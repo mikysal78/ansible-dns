@@ -1,0 +1,36 @@
+# /etc/nftables.d/dns.nft — Regole DNS per SECONDARY (VPS pubblico)
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+#
+# Il secondario risponde a query pubbliche su UDP/53,
+# accetta TCP/53 per query grandi e AXFR solo dal primary,
+# blocca aggiornamenti dinamici (DDNS non autorizzato).
+
+        # DNS UDP pubblico — con rate limiting per IP sorgente
+        # Gli IP in @dns_flood vengono bloccati automaticamente
+        udp dport 53 ip saddr @dns_flood \
+            log prefix "{{ nft_log_prefix_dns_flood }}" drop
+
+        udp dport 53 ct state new \
+            limit rate {{ nft_dns_rate_limit_pps }}/second \
+            burst {{ nft_dns_rate_limit_burst }} packets accept
+
+        # IP che superano il rate limit vengono aggiunti al set dinamico
+        udp dport 53 ct state new \
+            add @dns_flood { ip saddr timeout 120s } \
+            log prefix "{{ nft_log_prefix_dns_flood }}" drop
+
+        # DNS TCP pubblico (per risposte troncate, DNSSEC, query grandi)
+        # Limitato a query da IP non in flood, rate più basso
+        tcp dport 53 ip saddr @dns_flood drop
+        tcp dport 53 ct state new \
+            limit rate 10/second burst 20 packets accept
+
+        # AXFR TCP dal primary — senza rate limit (trasferimenti zona legittimi)
+        tcp dport 53 ip saddr @dns_primary accept
+
+        # Blocca esplicitamente DDNS (sicurezza extra, già bloccato da BIND)
+        # nsupdate usa TCP/53 — già gestito sopra dal blocco generico
+
+        # Loopback DNS
+        udp dport 53 iif lo accept
+        tcp dport 53 iif lo accept

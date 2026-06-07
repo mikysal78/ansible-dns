@@ -1,0 +1,24 @@
+---
+# ============================================================
+# PLAYBOOK — Rinnovo manuale certificati ACME
+# Uso: ansible-playbook playbooks/renew-certs.yml --ask-vault-pass
+# ============================================================
+
+- name: Rinnova certificati ACME
+  hosts: dns_primary
+  become: true
+
+  tasks:
+    - name: Forza rinnovo tutti i certificati
+      ansible.builtin.command:
+        cmd: >
+          {{ acme_install_dir }}/acme.sh
+          --renew-all
+          --force
+          --home {{ acme_install_dir }}
+      register: acme_result
+      changed_when: "'Cert success' in acme_result.stdout"
+
+    - name: Mostra output rinnovo
+      ansible.builtin.debug:
+        var: acme_result.stdout_lines

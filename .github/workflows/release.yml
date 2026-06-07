@@ -1,0 +1,66 @@
+---
+# .github/workflows/release.yml
+# Crea release automatica al push di tag vX.Y.Z
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Genera changelog dal tag precedente
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
+          else
+            CHANGES=$(git log --oneline --no-merges | head -20)
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Crea archivio release
+        run: |
+          tar czf ansible-dns-${{ github.ref_name }}.tar.gz \
+            --exclude='.git' \
+            --exclude='molecule' \
+            --exclude='.github' \
+            --exclude='*.vault' \
+            .
+
+      - name: Crea GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Release ${{ github.ref_name }}"
+          body: |
+            ## Modifiche in ${{ github.ref_name }}
+
+            ${{ steps.changelog.outputs.changes }}
+
+            ## Installazione
+
+            ```bash
+            wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ansible-dns-${{ github.ref_name }}.tar.gz
+            tar xzf ansible-dns-${{ github.ref_name }}.tar.gz
+            cd ansible-dns
+            ansible-galaxy collection install -r requirements.yml
+            ```
+          files: ansible-dns-${{ github.ref_name }}.tar.gz
+          draft: false
+          prerelease: false

@@ -1,0 +1,16 @@
+# /etc/fail2ban/action.d/nftables-dns.conf
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+# Aggiunge IP bannati direttamente al set nftables dns_flood
+
+[Definition]
+actionstart =
+actionstop  =
+actioncheck =
+
+# Ban: aggiunge IP al set dinamico dns_flood con timeout
+actionban   = nft add element inet filter dns_flood { <ip> timeout {{ hardening_fail2ban_dns_bantime }} }
+
+# Unban: rimuove IP dal set (fail2ban gestisce la scadenza)
+actionunban = nft delete element inet filter dns_flood { <ip> } || true
+
+[Init]

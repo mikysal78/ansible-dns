@@ -1,0 +1,88 @@
+---
+# ============================================================
+# TASKS — bind9_primary
+# ============================================================
+
+- name: Installa pacchetti BIND9
+  ansible.builtin.apt:
+    name: "{{ bind_packages }}"
+    state: present
+    update_cache: true
+
+- name: Crea directory per le zone
+  ansible.builtin.file:
+    path: "{{ bind_zones_dir }}"
+    state: directory
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0755"
+
+- name: Crea directory log
+  ansible.builtin.file:
+    path: "{{ bind_log_dir }}"
+    state: directory
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0755"
+
+- name: Deploy named.conf.options
+  ansible.builtin.template:
+    src: named.conf.options.j2
+    dest: "{{ bind_config_dir }}/named.conf.options"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+    validate: "named-checkconf %s"
+  notify: restart bind9
+
+- name: Deploy named.conf.local (zone declarations)
+  ansible.builtin.template:
+    src: named.conf.local.j2
+    dest: "{{ bind_config_dir }}/named.conf.local"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+    validate: "named-checkconf %s"
+  notify: reload bind9
+
+- name: Deploy TSIG key file
+  ansible.builtin.template:
+    src: tsig.key.j2
+    dest: "{{ bind_config_dir }}/tsig-axfr.key"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+  notify: reload bind9
+
+- name: Deploy DDNS key file
+  ansible.builtin.template:
+    src: ddns.key.j2
+    dest: "{{ bind_config_dir }}/ddns.key"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+  notify: reload bind9
+
+- name: Genera zone file da YAML per ogni zona
+  ansible.builtin.template:
+    src: zone.db.j2
+    dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0644"
+  loop: "{{ dns_zones }}"
+  vars:
+    zone_data: "{{ lookup('file', playbook_dir + '/' + item.file) | from_yaml }}"
+  notify: reload bind9
+
+- name: Verifica sintassi zone files
+  ansible.builtin.command:
+    cmd: "named-checkzone {{ item.name }} {{ bind_zones_dir }}/db.{{ item.name }}"
+  loop: "{{ dns_zones }}"
+  changed_when: false
+
+- name: Assicura che bind9 sia abilitato e avviato
+  ansible.builtin.systemd:
+    name: bind9
+    enabled: true
+    state: started

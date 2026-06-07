@@ -1,0 +1,119 @@
+---
+# ============================================================
+# TASKS — acme_dns
+# Installa acme.sh e ottiene certificati wildcard + statici
+# via DNS-01 challenge con nsupdate (DDNS sul primary)
+# ============================================================
+
+- name: Installa dipendenze acme.sh
+  ansible.builtin.apt:
+    name:
+      - curl
+      - socat
+      - dnsutils
+      - cron
+    state: present
+    update_cache: true
+
+- name: Crea directory certificati
+  ansible.builtin.file:
+    path: "{{ acme_certs_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Crea directory acme.sh home
+  ansible.builtin.file:
+    path: "{{ acme_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Scarica acme.sh
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh"
+    dest: "/tmp/acme_install.sh"
+    mode: "0755"
+
+- name: Installa acme.sh
+  ansible.builtin.command:
+    cmd: >
+      /tmp/acme_install.sh --install
+      --home {{ acme_install_dir }}
+      --config-home {{ acme_install_dir }}/config
+      --cert-home {{ acme_certs_dir }}
+      --accountemail {{ acme_email }}
+      --no-cron
+    creates: "{{ acme_install_dir }}/acme.sh"
+
+- name: Registra account ACME
+  ansible.builtin.command:
+    cmd: >
+      {{ acme_install_dir }}/acme.sh
+      --register-account
+      -m {{ acme_email }}
+      --server {{ acme_server }}
+      --home {{ acme_install_dir }}
+  changed_when: false
+
+- name: Deploy script hook nsupdate per DNS-01
+  ansible.builtin.template:
+    src: acme-dns-hook.sh.j2
+    dest: "{{ acme_install_dir }}/dns-hook.sh"
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Deploy file chiave DDNS per nsupdate
+  ansible.builtin.template:
+    src: nsupdate.key.j2
+    dest: "{{ acme_install_dir }}/nsupdate.key"
+    owner: root
+    group: root
+    mode: "0600"
+
+# Emetti certificati per ogni dominio configurato
+- name: Emetti certificati ACME (wildcard + root)
+  ansible.builtin.command:
+    cmd: >
+      {{ acme_install_dir }}/acme.sh
+      --issue
+      --dns dns_nsupdate
+      -d {{ item.domain }}
+      -d "*.{{ item.domain }}"
+      --home {{ acme_install_dir }}
+      --server {{ acme_server }}
+      --dnssleep 10
+      --keylength {{ item.keylength | default('ec-256') }}
+    environment:
+      NSUPDATE_SERVER: "{{ dns_primary_ip }}"
+      NSUPDATE_KEY: "{{ acme_install_dir }}/nsupdate.key"
+    creates: "{{ acme_certs_dir }}/{{ item.domain }}_ecc/{{ item.domain }}.cer"
+  loop: "{{ acme_domains }}"
+
+- name: Installa certificati nelle directory finali
+  ansible.builtin.command:
+    cmd: >
+      {{ acme_install_dir }}/acme.sh
+      --install-cert
+      -d {{ item.domain }}
+      --key-file   {{ acme_certs_dir }}/{{ item.domain }}.key
+      --fullchain-file {{ acme_certs_dir }}/{{ item.domain }}.fullchain.pem
+      --reloadcmd  "{{ acme_reload_cmd }}"
+      --home {{ acme_install_dir }}
+  loop: "{{ acme_domains }}"
+  changed_when: false
+
+- name: Configura cron per rinnovo automatico
+  ansible.builtin.cron:
+    name: "acme.sh renew"
+    minute: "30"
+    hour: "2"
+    job: >
+      {{ acme_install_dir }}/acme.sh
+      --cron
+      --home {{ acme_install_dir }}
+      >> /var/log/acme-renew.log 2>&1
+    user: root

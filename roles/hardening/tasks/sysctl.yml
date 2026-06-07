@@ -1,0 +1,32 @@
+---
+# ============================================================
+# TASK — sysctl.yml
+# Hardening parametri kernel: rete, memoria, exploit mitigation
+# ============================================================
+
+- name: Deploy file sysctl hardening
+  ansible.builtin.template:
+    src: sysctl-hardening.conf.j2
+    dest: /etc/sysctl.d/99-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: apply sysctl
+
+- name: Applica subito tutti i parametri sysctl
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-hardening.conf
+    reload: true
+    state: present
+  loop: "{{ hardening_sysctl_settings | dict2items }}"
+  # udp_mem ha 3 valori separati da spazio, gestito via template
+  when: item.value is not string or ' ' not in item.value | string
+
+- name: Applica parametri sysctl multi-valore (es. udp_mem)
+  ansible.builtin.command:
+    cmd: "sysctl -w {{ item.key }}='{{ item.value }}'"
+  loop: "{{ hardening_sysctl_settings | dict2items }}"
+  when: item.value is string and ' ' in item.value | string
+  changed_when: true

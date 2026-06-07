@@ -1,0 +1,76 @@
+// named.conf.options — PRIMARY (hidden)
+// Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+include "{{ bind_config_dir }}/tsig-axfr.key";
+include "{{ bind_config_dir }}/ddns.key";
+
+acl "secondaries" {
+{% for ip in dns_secondary_ips %}
+    {{ ip }};
+{% endfor %}
+};
+
+acl "ddns-clients" {
+    // Router OpenWrt autorizzati al DDNS
+    // Aggiungi qui gli IP pubblici dei router se fissi,
+    // altrimenti lascia any e affidati alla TSIG key
+    any;
+};
+
+options {
+    directory "/var/cache/bind";
+    pid-file "/run/named/named.pid";
+
+    listen-on    { 127.0.0.1; {{ dns_primary_ip }}; };
+    listen-on-v6 { none; };
+
+    // Hidden primary: NON risponde a query esterne
+    allow-query         { localhost; secondaries; };
+    allow-query-cache   { localhost; };
+    allow-transfer      { key "{{ dns_tsig_key_name }}"; };
+    allow-update        { key "{{ ddns_key_name }}"; };
+
+    // Notifica i secondari ad ogni cambio zona
+    notify yes;
+    also-notify {
+{% for ip in dns_secondary_ips %}
+        {{ ip }};
+{% endfor %}
+    };
+
+    recursion yes;
+    allow-recursion { localhost; };
+
+    dnssec-validation {{ bind_dnssec_validation }};
+    querylog {{ bind_querylog }};
+
+    // Limiti di trasferimento
+    transfers-out {{ bind_transfers_out }};
+
+    // Sicurezza: nasconde versione
+    version "not available";
+
+    // Logging
+    statistics-file "{{ bind_log_dir }}/named_stats.txt";
+};
+
+logging {
+    channel default_log {
+        file "{{ bind_log_dir }}/named.log" versions 5 size 10m;
+        severity dynamic;
+        print-time yes;
+        print-severity yes;
+        print-category yes;
+    };
+    channel ddns_log {
+        file "{{ bind_log_dir }}/ddns.log" versions 3 size 5m;
+        severity info;
+        print-time yes;
+    };
+    category default      { default_log; };
+    category update       { ddns_log; };
+    category update-security { ddns_log; };
+    category security     { default_log; };
+    category xfer-in      { default_log; };
+    category xfer-out     { default_log; };
+};

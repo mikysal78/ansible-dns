@@ -1,0 +1,52 @@
+---
+# ============================================================
+# TASK — rkhunter.yml
+# Installa rkhunter e configura scan periodico via cron
+# ============================================================
+
+- name: Installa rkhunter
+  ansible.builtin.apt:
+    name:
+      - rkhunter
+      - binutils       # dipendenza per analisi ELF
+      - unhide         # rileva processi nascosti
+    state: present
+
+- name: Aggiorna database rkhunter
+  ansible.builtin.command:
+    cmd: rkhunter --update --nocolors
+  register: rkhunter_update
+  changed_when: false
+  failed_when: rkhunter_update.rc not in [0, 2]   # rc=2 = nessun aggiornamento
+
+- name: Inizializza proprietà file (baseline)
+  ansible.builtin.command:
+    cmd: rkhunter --propupd --nocolors
+  changed_when: true
+
+- name: Deploy configurazione rkhunter
+  ansible.builtin.template:
+    src: rkhunter.conf.j2
+    dest: /etc/rkhunter.conf.local
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Configura cron per scan notturno
+  ansible.builtin.cron:
+    name: "rkhunter scan"
+    minute: "{{ hardening_rkhunter_cron_minute }}"
+    hour: "{{ hardening_rkhunter_cron_hour }}"
+    job: >
+      /usr/bin/rkhunter --cronjob --report-warnings-only
+      --nocolors 2>&1 | mail -s "[rkhunter] {{ ansible_hostname }}" {{ hardening_rkhunter_mail_to }}
+    user: root
+
+- name: Cron settimanale per aggiornamento database
+  ansible.builtin.cron:
+    name: "rkhunter update db"
+    minute: "0"
+    hour: "2"
+    weekday: "1"
+    job: "/usr/bin/rkhunter --update --nocolors >> /var/log/rkhunter-update.log 2>&1"
+    user: root

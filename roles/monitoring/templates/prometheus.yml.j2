@@ -1,0 +1,66 @@
+# /opt/prometheus/prometheus.yml
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+global:
+  scrape_interval:     {{ prometheus_scrape_interval }}
+  evaluation_interval: {{ prometheus_evaluation_interval }}
+  external_labels:
+    cluster: "dns-infra"
+    environment: "production"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "localhost:{{ alertmanager_port }}"
+
+rule_files:
+  - "{{ prometheus_dir }}/rules/*.yml"
+
+scrape_configs:
+
+  # --- Prometheus stesso ---
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:{{ prometheus_port }}"]
+
+  # --- node_exporter: tutti i server DNS ---
+  - job_name: "node"
+    static_configs:
+      - targets:
+          - "{{ dns_primary_ip }}:{{ node_exporter_port }}"
+          - "localhost:{{ node_exporter_port }}"
+        labels:
+          role: "dns_primary"
+{% for ip in dns_secondary_ips %}
+      - targets:
+          - "{{ ip }}:{{ node_exporter_port }}"
+        labels:
+          role: "dns_secondary"
+          instance: "ns{{ loop.index }}"
+{% endfor %}
+
+  # --- bind_exporter: primary ---
+  - job_name: "bind_primary"
+    static_configs:
+      - targets:
+          - "localhost:{{ bind_exporter_port }}"
+        labels:
+          role: "dns_primary"
+          instance: "primary"
+
+  # --- bind_exporter: secondari ---
+  - job_name: "bind_secondary"
+    static_configs:
+{% for ip in dns_secondary_ips %}
+      - targets:
+          - "{{ ip }}:{{ bind_exporter_port }}"
+        labels:
+          role: "dns_secondary"
+          instance: "ns{{ loop.index }}"
+{% endfor %}
+
+  # --- alertmanager ---
+  - job_name: "alertmanager"
+    static_configs:
+      - targets: ["localhost:{{ alertmanager_port }}"]

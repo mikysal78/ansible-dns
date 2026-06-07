@@ -1,0 +1,36 @@
+---
+# ============================================================
+# TASK — auditd.yml
+# Installa e configura auditd con regole CIS-ispirate
+# ============================================================
+
+- name: Installa auditd
+  ansible.builtin.apt:
+    name:
+      - auditd
+      - audispd-plugins
+    state: present
+
+- name: Deploy configurazione auditd.conf
+  ansible.builtin.template:
+    src: auditd.conf.j2
+    dest: /etc/audit/auditd.conf
+    owner: root
+    group: root
+    mode: "0640"
+  notify: restart auditd
+
+- name: Deploy regole audit (rules.d)
+  ansible.builtin.template:
+    src: audit.rules.j2
+    dest: /etc/audit/rules.d/99-hardening.rules
+    owner: root
+    group: root
+    mode: "0640"
+  notify: restart auditd
+
+- name: Abilita e avvia auditd
+  ansible.builtin.systemd:
+    name: auditd
+    enabled: true
+    state: started

@@ -1,0 +1,81 @@
+{
+  "title": "DNS Infrastructure Overview",
+  "uid": "dns-overview",
+  "tags": ["dns", "bind9", "dnssec"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Query Rate (all nodes)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(rate(bind_incoming_queries_total[5m]))", "legendFormat": "queries/s" }],
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "thresholds": {
+        "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1000}, {"color": "red", "value": 5000}]
+      }}}
+    },
+    {
+      "id": 2, "type": "stat", "title": "BIND9 Nodes Up",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "count(up{job=~\"bind_.*\"} == 1)", "legendFormat": "up" }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "thresholds": {
+        "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 1}, {"color": "green", "value": 2}]
+      }}}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Zone Transfers (24h)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "increase(bind_zone_transfer_success_total[24h])", "legendFormat": "success" }],
+      "fieldConfig": { "defaults": { "unit": "short" }}
+    },
+    {
+      "id": 4, "type": "stat", "title": "DNSSEC Errors (1h)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "increase(bind_resolver_dnssec_validation_errors_total[1h])", "legendFormat": "errors" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": {
+        "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 10}]
+      }}}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Query Rate per Node",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "rate(bind_incoming_queries_total[5m])", "legendFormat": "{{instance}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Query Types Distribution",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "rate(bind_incoming_queries_total[5m])", "legendFormat": "{{type}} — {{instance}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Cache Hit Rate",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "rate(bind_resolver_cache_hits_total[5m]) / (rate(bind_resolver_cache_hits_total[5m]) + rate(bind_resolver_cache_misses_total[5m]))",
+        "legendFormat": "hit rate — {{instance}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Zone Transfer Success/Failure",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "increase(bind_zone_transfer_success_total[5m])", "legendFormat": "success — {{instance}}" },
+        { "expr": "increase(bind_zone_transfer_failure_total[5m])", "legendFormat": "failure — {{instance}}" }
+      ]
+    },
+    {
+      "id": 9, "type": "table", "title": "Zone Serials",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 6 },
+      "targets": [{ "expr": "bind_zone_serial", "legendFormat": "{{instance}} — {{zone_name}}", "instant": true }],
+      "transformations": [{"id": "organize", "options": {}}]
+    }
+  ]
+}

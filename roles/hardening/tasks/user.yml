@@ -1,0 +1,56 @@
+---
+# ============================================================
+# TASK — user.yml
+# Crea utente ansible e carica chiavi SSH autorizzate
+# ============================================================
+
+- name: Assicura che il gruppo sudo esista
+  ansible.builtin.group:
+    name: sudo
+    state: present
+
+- name: Crea utente ansible non-root
+  ansible.builtin.user:
+    name: "{{ hardening_ansible_user }}"
+    shell: "{{ hardening_ansible_user_shell }}"
+    groups: "{{ hardening_ansible_user_groups }}"
+    append: true
+    create_home: true
+    state: present
+
+- name: Crea directory .ssh per utente ansible
+  ansible.builtin.file:
+    path: "/home/{{ hardening_ansible_user }}/.ssh"
+    state: directory
+    owner: "{{ hardening_ansible_user }}"
+    group: "{{ hardening_ansible_user }}"
+    mode: "0700"
+
+- name: Carica chiavi SSH autorizzate per ogni utente
+  ansible.posix.authorized_key:
+    user: "{{ item.user }}"
+    key: "{{ item.key }}"
+    state: present
+    exclusive: false
+  loop: "{{ hardening_ssh_authorized_keys }}"
+  when: hardening_ssh_authorized_keys | length > 0
+
+- name: Blocca login con password per utente ansible (solo chiave)
+  ansible.builtin.command:
+    cmd: "passwd -l {{ hardening_ansible_user }}"
+  changed_when: false
+
+- name: Configura sudo senza password SOLO per utente ansible (deploy Ansible)
+  ansible.builtin.lineinfile:
+    path: "/etc/sudoers.d/{{ hardening_ansible_user }}"
+    line: "{{ hardening_ansible_user }} ALL=(ALL) NOPASSWD: ALL"
+    create: true
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Disabilita login root via password
+  ansible.builtin.user:
+    name: root
+    password_lock: true

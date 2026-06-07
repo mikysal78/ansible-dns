@@ -1,0 +1,44 @@
+---
+# ============================================================
+# DEFAULTS — nftables
+# ============================================================
+
+nft_ssh_port: 22
+
+# Porta SSH alternativa opzionale (es. 2222), null = disabilitato
+nft_ssh_alt_port: ~
+
+# IP/subnet autorizzati a fare SSH (lista vuota = qualsiasi)
+# Consigliato: metti qui il tuo IP fisso o range VPN
+nft_ssh_allowed_sources: []
+#  - "1.2.3.4"
+#  - "10.0.0.0/8"
+
+# IP del primary: autorizzato a fare AXFR (TCP/53) sui secondari
+# Viene sovrascritto da dns_primary_ip in group_vars
+nft_primary_ip: "{{ dns_primary_ip }}"
+
+# Porte extra da aprire (vuoto = niente)
+nft_extra_tcp_ports: []
+nft_extra_udp_ports: []
+
+# --- Rate limiting DNS (anti-flood / anti-amplification) ---
+# Query per IP al secondo prima di droppare
+nft_dns_rate_limit_pps: 30        # pacchetti/s per IP sorgente
+nft_dns_rate_limit_burst: 50      # burst consentito
+
+# Dimensione massima risposta UDP prima di troncare (anti-amplification)
+# BIND usa già EDNS truncation, nft agisce a livello pacchetto
+nft_dns_udp_response_maxbytes: 512
+
+# --- ICMP ---
+nft_icmp_rate_limit: "5/second"
+nft_icmp_rate_limit_burst: 10
+
+# --- Conntrack ---
+nft_conntrack_max: 65536
+
+# --- Logging ---
+nft_log_dropped: true
+nft_log_prefix_drop: "nft-drop: "
+nft_log_prefix_dns_flood: "nft-dns-flood: "

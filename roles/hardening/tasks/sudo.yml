@@ -1,0 +1,37 @@
+---
+# ============================================================
+# TASK — sudo.yml
+# Hardening sudo: log completo, no NOPASSWD globale, requiretty
+# ============================================================
+
+- name: Installa sudo
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+
+- name: Deploy configurazione sudo hardenizzata
+  ansible.builtin.template:
+    src: sudoers-hardening.j2
+    dest: /etc/sudoers.d/99-hardening
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Crea directory log sudo
+  ansible.builtin.file:
+    path: "{{ hardening_sudo_log_file | dirname }}"
+    state: directory
+    owner: root
+    group: adm
+    mode: "0750"
+
+- name: Assicura che il file di log sudo esista
+  ansible.builtin.file:
+    path: "{{ hardening_sudo_log_file }}"
+    state: touch
+    owner: root
+    group: adm
+    mode: "0640"
+    modification_time: preserve
+    access_time: preserve

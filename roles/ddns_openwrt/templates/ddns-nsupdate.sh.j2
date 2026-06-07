@@ -1,0 +1,58 @@
+#!/bin/sh
+# ============================================================
+# Script DDNS per OpenWrt — aggiorna record via nsupdate TSIG
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+# ============================================================
+
+DNS_SERVER="{{ dns_primary_ip }}"
+TSIG_KEY="/etc/ddns/ddns.key"
+DDNS_ZONE="{{ ddns_zone }}"
+HOSTNAME="{{ ddns_hostname }}"
+TTL="{{ ddns_ttl }}"
+
+update_dns() {
+    local ip="$1"
+    logger -t ddns "Aggiornamento ${HOSTNAME} → ${ip}"
+
+    nsupdate -k "${TSIG_KEY}" << EOF
+server ${DNS_SERVER}
+zone ${DDNS_ZONE}
+update delete ${HOSTNAME}. A
+update add ${HOSTNAME}. ${TTL} A ${ip}
+send
+EOF
+
+    if [ $? -eq 0 ]; then
+        logger -t ddns "Successo: ${HOSTNAME} aggiornato a ${ip}"
+        return 0
+    else
+        logger -t ddns "ERRORE: impossibile aggiornare ${HOSTNAME}"
+        return 1
+    fi
+}
+
+# Ottieni IP pubblico dell'interfaccia WAN
+get_public_ip() {
+    # Prova prima con l'IP dell'interfaccia
+    local iface_ip
+    iface_ip=$(ip -4 addr show {{ ddns_interface }} | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+
+    # Se l'IP è privato/CGNAT, usa servizio esterno
+    case "$iface_ip" in
+        10.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|192.168.*|100.6[4-9].*|100.[7-9][0-9].*|100.1[0-1][0-9].*|100.12[0-7].*)
+            curl -s https://api4.my-ip.io/ip 2>/dev/null || \
+            curl -s https://ipv4.icanhazip.com 2>/dev/null
+            ;;
+        *)
+            echo "$iface_ip"
+            ;;
+    esac
+}
+
+CURRENT_IP=$(get_public_ip)
+if [ -z "$CURRENT_IP" ]; then
+    logger -t ddns "ERRORE: impossibile determinare IP pubblico"
+    exit 1
+fi
+
+update_dns "$CURRENT_IP"

@@ -1,0 +1,37 @@
+---
+# ============================================================
+# TASKS — monitoring (orchestratore)
+# ============================================================
+
+- name: "[monitoring] Installa dipendenze"
+  ansible.builtin.apt:
+    name:
+      - adduser
+      - libfontconfig1
+      - wget
+      - curl
+      - apt-transport-https
+      - software-properties-common
+    state: present
+    update_cache: true
+
+- name: "[monitoring] node_exporter"
+  ansible.builtin.include_tasks: tasks/node_exporter.yml
+
+- name: "[monitoring] bind_exporter"
+  ansible.builtin.include_tasks: tasks/bind_exporter.yml
+
+- name: "[monitoring] Prometheus (solo primary)"
+  ansible.builtin.include_tasks: tasks/prometheus.yml
+  when: "'dns_primary' in group_names"
+
+- name: "[monitoring] Alertmanager (solo primary)"
+  ansible.builtin.include_tasks: tasks/alertmanager.yml
+  when: "'dns_primary' in group_names"
+
+- name: "[monitoring] Grafana (solo primary)"
+  ansible.builtin.include_tasks: tasks/grafana.yml
+  when: "'dns_primary' in group_names"
+
+- name: "[monitoring] Configura BIND9 per statistiche HTTP"
+  ansible.builtin.include_tasks: tasks/bind_stats.yml

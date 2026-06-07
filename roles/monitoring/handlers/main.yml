@@ -1,0 +1,46 @@
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: restarted
+
+- name: restart bind_exporter
+  ansible.builtin.systemd:
+    name: bind_exporter
+    state: restarted
+
+- name: restart prometheus
+  ansible.builtin.systemd:
+    name: prometheus
+    state: restarted
+
+- name: reload prometheus
+  ansible.builtin.uri:
+    url: "http://localhost:{{ prometheus_port }}/-/reload"
+    method: POST
+  failed_when: false
+
+- name: restart alertmanager
+  ansible.builtin.systemd:
+    name: alertmanager
+    state: restarted
+
+- name: reload alertmanager
+  ansible.builtin.uri:
+    url: "http://localhost:{{ alertmanager_port }}/-/reload"
+    method: POST
+  failed_when: false
+
+- name: restart grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    state: restarted
+
+- name: reload bind9
+  ansible.builtin.systemd:
+    name: bind9
+    state: reloaded

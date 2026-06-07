@@ -1,0 +1,31 @@
+---
+# ============================================================
+# ZONA REVERSE: 113.0.203.in-addr.arpa
+# ============================================================
+
+zone:
+  name: "113.0.203.in-addr.arpa"
+  ttl: 3600
+
+  soa:
+    primary_ns: "ns1.example.com."
+    admin:      "hostmaster.example.com."
+    serial:     "{{ '%Y%m%d01' | strftime }}"
+    refresh:    7200
+    retry:      3600
+    expire:     1209600
+    minimum:    300
+
+  ns:
+    - "ns1.example.com."
+    - "ns2.example.com."
+
+  # --- PTR records ---
+  # formato: last_octet → FQDN
+  ptr:
+    - last_octet: "10"
+      fqdn: "ns1.example.com."
+    - last_octet: "20"
+      fqdn: "ns2.example.com."
+    - last_octet: "50"
+      fqdn: "vpn.example.com."

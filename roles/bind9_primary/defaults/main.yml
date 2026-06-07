@@ -1,0 +1,19 @@
+---
+# Defaults per il role bind9_primary
+bind_packages:
+  - bind9
+  - bind9utils
+  - bind9-doc
+  - python3-dnspython
+
+bind_options_listen_on: "any"
+bind_options_listen_on_v6: "any"
+bind_recursion: "no"
+bind_dnssec_validation: "auto"
+bind_querylog: "yes"
+
+# Abilita NOTIFY verso i secondari
+bind_notify: "yes"
+
+# Numero massimo di trasferimenti in uscita simultanei
+bind_transfers_out: 10

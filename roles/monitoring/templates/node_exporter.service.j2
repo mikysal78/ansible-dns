@@ -1,0 +1,26 @@
+[Unit]
+Description=Node Exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=node_exporter
+Group=node_exporter
+ExecStart=/usr/local/bin/node_exporter \
+  --web.listen-address="127.0.0.1:{{ node_exporter_port }}" \
+  --collector.systemd \
+  --collector.processes \
+  --collector.interrupts \
+  --no-collector.wifi \
+  --no-collector.hwmon
+Restart=always
+RestartSec=5s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+
+[Install]
+WantedBy=multi-user.target

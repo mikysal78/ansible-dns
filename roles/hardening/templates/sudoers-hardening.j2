@@ -1,0 +1,27 @@
+# /etc/sudoers.d/99-hardening
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+# Validato con: visudo -cf
+
+Defaults    log_output
+Defaults    logfile="{{ hardening_sudo_log_file }}"
+Defaults    log_input
+Defaults    !visiblepw
+Defaults    always_set_home
+Defaults    match_group_by_gid
+Defaults    always_query_group_plugin
+Defaults    env_reset
+Defaults    env_delete += "TERM HOSTNAME SHELL MAIL LANG LC_ADDRESS LC_CTYPE LC_COLLATE LC_IDENTIFICATION LC_MEASUREMENT LC_MESSAGES LC_MONETARY LC_NAME LC_NUMERIC LC_PAPER LC_TELEPHONE LC_TIME LC_ALL LANGUAGE LINGUAS XDG_SESSION_COOKIE"
+Defaults    secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults    use_pty
+{% if hardening_sudo_requiretty %}
+Defaults    requiretty
+{% endif %}
+Defaults    lecture={{ hardening_sudo_lecture }}
+Defaults    passwd_tries=3
+Defaults    passwd_timeout=1
+Defaults    timestamp_timeout=5
+Defaults    syslog=authpriv
+
+# Nessun NOPASSWD globale — solo eccezione per utente ansible (in file separato)
+# I gruppi admin devono sempre inserire la password
+%sudo   ALL=(ALL:ALL) ALL

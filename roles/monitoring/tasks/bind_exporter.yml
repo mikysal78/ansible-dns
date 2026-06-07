@@ -1,0 +1,54 @@
+---
+# ============================================================
+# TASK — bind_exporter.yml
+# Espone metriche BIND9 (query rate, zone transfer, DNSSEC, cache)
+# ============================================================
+
+- name: Crea utente sistema bind_exporter
+  ansible.builtin.user:
+    name: bind_exporter
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+    groups: "{{ bind_group }}"
+    append: true
+
+- name: Scarica bind_exporter
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus-community/bind_exporter/releases/download/v{{ bind_exporter_version }}/bind_exporter-{{ bind_exporter_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/bind_exporter-{{ bind_exporter_version }}.tar.gz"
+    mode: "0644"
+
+- name: Estrai bind_exporter
+  ansible.builtin.unarchive:
+    src: "/tmp/bind_exporter-{{ bind_exporter_version }}.tar.gz"
+    dest: /tmp
+    remote_src: true
+
+- name: Installa binario bind_exporter
+  ansible.builtin.copy:
+    src: "/tmp/bind_exporter-{{ bind_exporter_version }}.linux-amd64/bind_exporter"
+    dest: /usr/local/bin/bind_exporter
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: true
+  notify: restart bind_exporter
+
+- name: Deploy systemd unit bind_exporter
+  ansible.builtin.template:
+    src: bind_exporter.service.j2
+    dest: /etc/systemd/system/bind_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart bind_exporter
+
+- name: Abilita e avvia bind_exporter
+  ansible.builtin.systemd:
+    name: bind_exporter
+    enabled: true
+    state: started
+    daemon_reload: true

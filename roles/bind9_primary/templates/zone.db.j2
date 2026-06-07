@@ -1,0 +1,72 @@
+; ============================================================
+; Zona: {{ zone_data.zone.name }}
+; Generata da Ansible da file YAML — NON MODIFICARE MANUALMENTE
+; Ultimo aggiornamento: {{ ansible_date_time.iso8601 }}
+; ============================================================
+
+$ORIGIN {{ zone_data.zone.name }}.
+$TTL    {{ zone_data.zone.ttl | default(3600) }}
+
+; --- SOA ---
+@   IN  SOA {{ zone_data.zone.soa.primary_ns }} {{ zone_data.zone.soa.admin }} (
+                {{ zone_serial_override | default(ansible_date_time.date | replace("-","") ~ "01") }} ; serial YYYYMMDDNN
+                {{ zone_data.zone.soa.refresh  | default(7200)   }} ; refresh
+                {{ zone_data.zone.soa.retry    | default(3600)   }} ; retry
+                {{ zone_data.zone.soa.expire   | default(1209600)}} ; expire
+                {{ zone_data.zone.soa.minimum  | default(300)    }} ; minimum TTL
+            )
+
+; --- NS ---
+{% for ns in zone_data.zone.ns | default([]) %}
+@   IN  NS  {{ ns }}
+{% endfor %}
+
+; --- A ---
+{% for r in zone_data.zone.a | default([]) %}
+{{ r.name | ljust(30) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  A       {{ r.ip }}
+{% endfor %}
+
+; --- AAAA ---
+{% for r in zone_data.zone.aaaa | default([]) %}
+{{ r.name | ljust(30) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  AAAA    {{ r.ip }}
+{% endfor %}
+
+; --- CNAME ---
+{% for r in zone_data.zone.cname | default([]) %}
+{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  CNAME   {{ r.target }}
+{% endfor %}
+
+; --- MX ---
+{% for r in zone_data.zone.mx | default([]) %}
+@   {{ zone_data.zone.ttl | default(3600) }} IN  MX      {{ r.priority }} {{ r.host }}
+{% endfor %}
+
+; --- TXT ---
+{% for r in zone_data.zone.txt | default([]) %}
+{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  TXT     "{{ r.value }}"
+{% endfor %}
+
+; --- SRV ---
+{% for r in zone_data.zone.srv | default([]) %}
+{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  SRV     {{ r.priority }} {{ r.weight }} {{ r.port }} {{ r.target }}
+{% endfor %}
+
+; --- CAA ---
+{% for r in zone_data.zone.caa | default([]) %}
+{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  CAA     {{ r.flag }} {{ r.tag }} "{{ r.value }}"
+{% endfor %}
+
+; --- TLSA ---
+{% for r in zone_data.zone.tlsa | default([]) %}
+{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  TLSA    {{ r.usage }} {{ r.selector }} {{ r.matching }} {{ r.certificate_hash }}
+{% endfor %}
+
+; --- SSHFP ---
+{% for r in zone_data.zone.sshfp | default([]) %}
+{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  SSHFP   {{ r.algorithm }} {{ r.type }} {{ r.fingerprint }}
+{% endfor %}
+
+; --- PTR (zone reverse) ---
+{% for r in zone_data.zone.ptr | default([]) %}
+{{ r.last_octet | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  PTR     {{ r.fqdn }}
+{% endfor %}

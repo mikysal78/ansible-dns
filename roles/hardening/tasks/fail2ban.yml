@@ -1,0 +1,43 @@
+---
+# ============================================================
+# TASK — fail2ban.yml
+# Jail SSH + jail DNS flood custom
+# ============================================================
+
+- name: Installa fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+
+- name: Deploy fail2ban jail.local
+  ansible.builtin.template:
+    src: fail2ban-jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart fail2ban
+
+- name: Deploy filtro custom per DNS flood
+  ansible.builtin.template:
+    src: fail2ban-filter-dns.conf.j2
+    dest: /etc/fail2ban/filter.d/named-flood.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart fail2ban
+
+- name: Deploy action fail2ban → nftables (integrazione set dns_flood)
+  ansible.builtin.template:
+    src: fail2ban-action-nftables-dns.conf.j2
+    dest: /etc/fail2ban/action.d/nftables-dns.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart fail2ban
+
+- name: Abilita e avvia fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started

@@ -1,0 +1,66 @@
+---
+# ============================================================
+# PLAYBOOK — Verifica stato DNSSEC e prossime rotazioni chiavi
+# Uso: ansible-playbook playbooks/dnssec-status.yml --ask-vault-pass
+# ============================================================
+
+- name: Stato DNSSEC
+  hosts: dns_primary
+  become: true
+
+  tasks:
+    - name: Stato chiavi DNSSEC (dnssec-settime)
+      ansible.builtin.shell:
+        cmd: |
+          for key in {{ dnssec_key_directory }}/K*.key; do
+            echo "=== $key ==="
+            dnssec-settime -p all "$key"
+          done
+        executable: /bin/bash
+      register: key_status
+      changed_when: false
+
+    - name: Mostra stato chiavi
+      ansible.builtin.debug:
+        var: key_status.stdout_lines
+
+    - name: Verifica firma zone
+      ansible.builtin.command:
+        cmd: "rndc dnssec -status {{ item.name }}"
+      loop: "{{ dns_zones }}"
+      register: dnssec_zone_status
+      changed_when: false
+      failed_when: false
+
+    - name: Mostra stato zone DNSSEC
+      ansible.builtin.debug:
+        var: dnssec_zone_status.results
+
+    - name: Mostra DS records attuali
+      ansible.builtin.shell:
+        cmd: >
+          dnssec-dsfromkey -a SHA-256
+          $(ls {{ dnssec_key_directory }}/K{{ item.name }}*.key 2>/dev/null | head -1)
+        executable: /bin/bash
+      loop: "{{ dns_zones | selectattr('ddns_enabled', 'equalto', false) | list }}"
+      register: ds_output
+      changed_when: false
+      failed_when: false
+
+    - name: DS Records (da pubblicare/verificare presso il registrar)
+      ansible.builtin.debug:
+        msg: |
+          Zona: {{ item.item.name }}
+          {{ item.stdout | default('N/A') }}
+      loop: "{{ ds_output.results }}"
+
+    - name: Verifica ruleset nftables attivo
+      ansible.builtin.command:
+        cmd: nft list ruleset
+      register: nft_ruleset
+      changed_when: false
+
+    - name: Mostra ruleset nftables
+      ansible.builtin.debug:
+        var: nft_ruleset.stdout_lines
+      when: ansible_verbosity >= 1

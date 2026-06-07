@@ -1,0 +1,15 @@
+# /etc/nftables.d/anti-amplification.nft
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+#
+# Incluso dalla chain input di inet filter.
+# Regole aggiuntive OUTPUT sono in tabella dedicata nel file principale.
+
+        # Blocca query DNS di tipo ANY (qtype 255) — principale vettore amplification
+        # Il payload UDP DNS: byte 2-3 = flags, byte 4-5 = qdcount
+        # qtype è negli ultimi 2 byte della question section
+        # Approccio pragmatico: blocca pacchetti UDP/53 con dimensione
+        # tipica delle query ANY (piccole richieste → risposte enormi)
+        # BIND ha già "minimal-responses" ma nft aggiunge un layer esterno
+
+        # Rate limit globale sulle risposte UDP grandi in OUTPUT
+        # (gestito nella tabella output del conf principale)

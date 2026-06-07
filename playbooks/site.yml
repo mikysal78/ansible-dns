@@ -1,0 +1,32 @@
+---
+# ============================================================
+# PLAYBOOK PRINCIPALE — Infrastruttura DNS
+# Uso: ansible-playbook playbooks/site.yml --ask-vault-pass
+# ============================================================
+
+- name: Deploy DNS Primary (hidden master)
+  hosts: dns_primary
+  become: true
+  roles:
+    - role: packages        # installa tutti i pacchetti necessari
+    - role: hardening       # hardening OS (ssh, sysctl, fs, auditd, fail2ban...)
+    - role: nftables        # firewall (primary: solo secondari e localhost)
+    - role: bind9_primary   # BIND9 hidden master + zone files
+    - role: dnssec          # inline signing DNSSEC
+    - role: acme_dns        # certificati wildcard via DNS-01
+
+- name: Deploy DNS Secondari (pubblici)
+  hosts: dns_secondary
+  become: true
+  roles:
+    - role: packages
+    - role: hardening
+    - role: nftables        # firewall (secondari: pubblico con rate limiting)
+    - role: bind9_secondary
+
+- name: Configura DDNS su router OpenWrt
+  hosts: openwrt_routers
+  become: true
+  gather_facts: false
+  roles:
+    - role: ddns_openwrt

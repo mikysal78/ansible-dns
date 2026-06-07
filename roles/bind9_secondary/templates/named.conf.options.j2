@@ -1,0 +1,41 @@
+// named.conf.options — SECONDARY
+// Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+include "{{ bind_config_dir }}/tsig-axfr.key";
+
+options {
+    directory "/var/cache/bind";
+
+    listen-on    { any; };
+    listen-on-v6 { any; };
+
+    // Risponde a query pubbliche (solo per le zone servite)
+    allow-query         { any; };
+    allow-query-cache   { localhost; };
+
+    // Non accetta trasferimenti né aggiornamenti
+    allow-transfer      { none; };
+    allow-update        { none; };
+
+    // Nessuna ricorsione verso l'esterno
+    recursion yes;
+    allow-recursion { localhost; };
+
+    dnssec-validation auto;
+
+    // Sicurezza: nasconde versione
+    version "not available";
+};
+
+logging {
+    channel default_log {
+        file "{{ bind_log_dir }}/named.log" versions 5 size 10m;
+        severity dynamic;
+        print-time yes;
+        print-severity yes;
+        print-category yes;
+    };
+    category default  { default_log; };
+    category xfer-in  { default_log; };
+    category security { default_log; };
+};

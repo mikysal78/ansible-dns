@@ -1,0 +1,38 @@
+# /etc/nftables.d/dns.nft — Regole DNS per PRIMARY (hidden master)
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+#
+# Il primary è nascosto: accetta DNS solo da localhost e secondari,
+# accetta AXFR (TCP) solo dai secondari con TSIG,
+# accetta DDNS (UDP+TCP) solo da localhost e router autorizzati.
+
+        # DNS ricorsivo localhost
+        udp dport 53 iif lo accept
+        tcp dport 53 iif lo accept
+
+        # DNS query dai secondari (per NOTIFY/SOA check)
+        udp dport 53 ip saddr @dns_secondaries accept
+
+        # AXFR TCP dai secondari (autenticato via TSIG a livello BIND)
+        tcp dport 53 ip saddr @dns_secondaries \
+            ct state new limit rate 5/minute burst 10 packets accept
+
+        # DDNS nsupdate: accetta da localhost (acme.sh) e router OpenWrt
+        # I router si autenticano via TSIG, il firewall lascia passare per IP
+        udp dport 53 ip saddr {
+{% for ip in ddns_allowed_sources | default([]) %}
+            {{ ip }}{% if not loop.last %},{% endif %}
+
+{% endfor %}
+            127.0.0.1
+        } accept
+        tcp dport 53 ip saddr {
+{% for ip in ddns_allowed_sources | default([]) %}
+            {{ ip }}{% if not loop.last %},{% endif %}
+
+{% endfor %}
+            127.0.0.1
+        } accept
+
+        # Tutto il resto su porta 53 viene droppato silenziosamente
+        udp dport 53 drop
+        tcp dport 53 drop

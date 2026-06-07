@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ============================================================
+# Hook acme.sh per DNS-01 via nsupdate (DDNS su BIND9)
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+# ============================================================
+# Usato automaticamente da acme.sh con dns_nsupdate provider
+
+NSUPDATE_SERVER="{{ dns_primary_ip }}"
+NSUPDATE_KEY="{{ acme_install_dir }}/nsupdate.key"
+NSUPDATE_TTL=60
+
+dns_nsupdate_add() {
+    local fulldomain="${1}"
+    local txtvalue="${2}"
+
+    nsupdate -k "${NSUPDATE_KEY}" << EOF
+server ${NSUPDATE_SERVER}
+update add _acme-challenge.${fulldomain}. ${NSUPDATE_TTL} TXT "${txtvalue}"
+send
+EOF
+    echo "ACME: aggiunto _acme-challenge.${fulldomain} TXT ${txtvalue}"
+    sleep 5
+}
+
+dns_nsupdate_rm() {
+    local fulldomain="${1}"
+    local txtvalue="${2}"
+
+    nsupdate -k "${NSUPDATE_KEY}" << EOF
+server ${NSUPDATE_SERVER}
+update delete _acme-challenge.${fulldomain}. TXT "${txtvalue}"
+send
+EOF
+    echo "ACME: rimosso _acme-challenge.${fulldomain}"
+}

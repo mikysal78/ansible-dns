@@ -1,0 +1,200 @@
+---
+# ============================================================
+# PLAYBOOK — Aggiornamento zone DNS
+# Serial SOA: gestione automatica formato YYYYMMDDnn
+#
+# Uso:
+#   ansible-playbook playbooks/update-zones.yml --ask-vault-pass
+#   ansible-playbook playbooks/update-zones.yml --ask-vault-pass \
+#     -e "zone_name=example.com"          # aggiorna solo una zona
+#   ansible-playbook playbooks/update-zones.yml --ask-vault-pass \
+#     -e "force_serial=true"              # forza incremento serial
+# ============================================================
+
+- name: Aggiorna zone DNS con serial SOA automatico
+  hosts: dns_primary
+  become: true
+  gather_facts: true
+
+  vars:
+    today: "{{ ansible_date_time.date | replace('-', '') }}"
+    zone_name: ""
+    force_serial: false
+
+  tasks:
+
+    # ----------------------------------------------------------
+    # 1. Serial corrente per ogni zona
+    # ----------------------------------------------------------
+    - name: Leggi serial SOA corrente da BIND
+      ansible.builtin.shell:
+        cmd: >
+          rndc zonestatus {{ item.name }} 2>/dev/null |
+          grep -i serial | awk '{print $NF}' || echo "0"
+        executable: /bin/bash
+      register: current_serials
+      loop: "{{ dns_zones | selectattr('name', 'match', zone_name ~ '.*') | list
+                if zone_name else dns_zones }}"
+      changed_when: false
+
+    - name: Mappa zona → serial corrente
+      ansible.builtin.set_fact:
+        zone_serial_map: >-
+          {{ zone_serial_map | default({}) | combine({
+            item.item.name: item.stdout | trim | default('0')
+          }) }}
+      loop: "{{ current_serials.results }}"
+
+    - name: "Seriali attuali"
+      ansible.builtin.debug:
+        msg: "{{ item.key }}: serial={{ item.value }}"
+      loop: "{{ zone_serial_map | dict2items }}"
+
+    # ----------------------------------------------------------
+    # 2. Calcola nuovo serial YYYYMMDDnn
+    #    - Se il serial inizia con oggi → incrementa nn
+    #    - Se è un giorno passato → YYYYMMDD01
+    # ----------------------------------------------------------
+    - name: Calcola nuovo serial per ogni zona
+      ansible.builtin.set_fact:
+        zone_new_serial_map: >-
+          {{ zone_new_serial_map | default({}) | combine({
+            item.key: (
+              (item.value | string)[:8] == today
+              | ternary(
+                  ((item.value | int) + 1) | string,
+                  today ~ '01'
+                )
+            )
+          }) }}
+      loop: "{{ zone_serial_map | dict2items }}"
+
+    - name: "Nuovi seriali calcolati"
+      ansible.builtin.debug:
+        msg: "{{ item.key }}: {{ zone_serial_map[item.key] }} → {{ item.value }}"
+      loop: "{{ zone_new_serial_map | dict2items }}"
+
+    # ----------------------------------------------------------
+    # 3. Genera zona temporanea e calcola diff
+    # ----------------------------------------------------------
+    - name: Genera zone temporanee per diff
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/bind9_primary/templates/zone.db.j2"
+        dest: "/tmp/dns-zone-new-{{ item.name }}"
+        mode: "0644"
+      loop: "{{ dns_zones | selectattr('name', 'match', zone_name ~ '.*') | list
+                if zone_name else dns_zones }}"
+      vars:
+        zone_data: "{{ lookup('file', playbook_dir + '/../' + item.file) | from_yaml }}"
+        zone_serial_override: "{{ zone_new_serial_map[item.name] }}"
+
+    - name: Diff zona corrente vs nuova
+      ansible.builtin.command:
+        cmd: >
+          diff {{ bind_zones_dir }}/db.{{ item.name }}
+               /tmp/dns-zone-new-{{ item.name }}
+      register: zone_diffs
+      loop: "{{ dns_zones | selectattr('name', 'match', zone_name ~ '.*') | list
+                if zone_name else dns_zones }}"
+      changed_when: false
+      failed_when: zone_diffs.rc > 1
+
+    - name: Identifica zone modificate
+      ansible.builtin.set_fact:
+        zones_changed: >-
+          {{ zones_changed | default([]) +
+            ([item.item.name] if (item.rc == 1 or (force_serial | bool)) else []) }}
+      loop: "{{ zone_diffs.results }}"
+
+    - name: "Zone da aggiornare"
+      ansible.builtin.debug:
+        msg: "{{ zones_changed | default([]) | join(', ') or 'Nessuna modifica rilevata — niente da fare' }}"
+
+    # ----------------------------------------------------------
+    # 4. Deploy zone modificate
+    # ----------------------------------------------------------
+    - name: Deploy zone file aggiornati
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/bind9_primary/templates/zone.db.j2"
+        dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
+        owner: "{{ bind_user }}"
+        group: "{{ bind_group }}"
+        mode: "0644"
+        backup: true
+      loop: "{{ dns_zones | selectattr('name', 'in', zones_changed | default([])) | list }}"
+      vars:
+        zone_data: "{{ lookup('file', playbook_dir + '/../' + item.file) | from_yaml }}"
+        zone_serial_override: "{{ zone_new_serial_map[item.name] }}"
+      when: zones_changed | default([]) | length > 0
+
+    # ----------------------------------------------------------
+    # 5. Verifica sintassi
+    # ----------------------------------------------------------
+    - name: named-checkzone
+      ansible.builtin.command:
+        cmd: "named-checkzone {{ item.name }} {{ bind_zones_dir }}/db.{{ item.name }}"
+      loop: "{{ dns_zones | selectattr('name', 'in', zones_changed | default([])) | list }}"
+      register: checkzone_results
+      changed_when: false
+      when: zones_changed | default([]) | length > 0
+
+    - name: Abort se checkzone fallisce
+      ansible.builtin.fail:
+        msg: "Errore sintassi zona {{ item.item.name }}: {{ item.stderr }}"
+      loop: "{{ checkzone_results.results | default([]) }}"
+      when: item.rc | default(0) != 0
+
+    # ----------------------------------------------------------
+    # 6. Reload BIND + notify secondari
+    # ----------------------------------------------------------
+    - name: rndc reload per zona modificata
+      ansible.builtin.command:
+        cmd: "rndc reload {{ item }}"
+      loop: "{{ zones_changed | default([]) }}"
+      when: zones_changed | default([]) | length > 0
+
+    - name: rndc notify → propagazione ai secondari
+      ansible.builtin.command:
+        cmd: "rndc notify {{ item }}"
+      loop: "{{ zones_changed | default([]) }}"
+      when: zones_changed | default([]) | length > 0
+
+    # ----------------------------------------------------------
+    # 7. Verifica propagazione sui secondari
+    # ----------------------------------------------------------
+    - name: Attendi e verifica serial sui secondari
+      ansible.builtin.command:
+        cmd: "dig +short +time=5 SOA {{ item.0 }} @{{ item.1 }}"
+      loop: "{{ (zones_changed | default([])) | product(dns_secondary_ips) | list }}"
+      register: secondary_verify
+      changed_when: false
+      retries: 6
+      delay: 5
+      until: zone_new_serial_map[item.0] in (secondary_verify.stdout | default(''))
+      failed_when: false
+
+    - name: "Report propagazione"
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item.0 }} @{{ item.item.1 }}:
+          {{ 'OK serial=' ~ zone_new_serial_map[item.item.0]
+             if zone_new_serial_map[item.item.0] in (item.stdout | default(''))
+             else 'NON propagato — ' ~ (item.stdout | default('timeout')) }}
+      loop: "{{ secondary_verify.results | default([]) }}"
+
+    # ----------------------------------------------------------
+    # 8. Pulizia e summary
+    # ----------------------------------------------------------
+    - name: Rimuovi file temporanei
+      ansible.builtin.file:
+        path: "/tmp/dns-zone-new-{{ item.name }}"
+        state: absent
+      loop: "{{ dns_zones }}"
+
+    - name: "=== SUMMARY ==="
+      ansible.builtin.debug:
+        msg: |
+          Zone aggiornate : {{ zones_changed | default([]) | join(', ') or 'nessuna' }}
+          {% for z in zones_changed | default([]) %}
+          ✓ {{ z | ljust(30) }} serial {{ zone_serial_map[z] }} → {{ zone_new_serial_map[z] }}
+          {% endfor %}

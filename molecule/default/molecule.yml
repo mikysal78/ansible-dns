@@ -1,0 +1,114 @@
+---
+# molecule/default/molecule.yml
+# Test per: bind9_primary, hardening, packages, nftables
+# Driver: Docker (Debian Trixie)
+
+dependency:
+  name: galaxy
+  options:
+    requirements-file: requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: dns-primary-test
+    image: "debian:trixie"
+    pre_build_image: true
+    privileged: false
+    capabilities:
+      - NET_ADMIN
+      - SYS_PTRACE
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    command: "/lib/systemd/systemd"
+    cgroupns_mode: host
+    tmpfs:
+      - /run
+      - /tmp
+    environment:
+      DEBIAN_FRONTEND: noninteractive
+    groups:
+      - dns_primary
+
+  - name: dns-secondary-test
+    image: "debian:trixie"
+    pre_build_image: true
+    privileged: false
+    capabilities:
+      - NET_ADMIN
+    command: "/lib/systemd/systemd"
+    cgroupns_mode: host
+    tmpfs:
+      - /run
+      - /tmp
+    environment:
+      DEBIAN_FRONTEND: noninteractive
+    groups:
+      - dns_secondary
+
+provisioner:
+  name: ansible
+  inventory:
+    group_vars:
+      all:
+        dns_primary_ip: "172.17.0.2"
+        dns_secondary_ips:
+          - "172.17.0.3"
+        dns_tsig_key_name: "axfr-key"
+        dns_tsig_algorithm: "hmac-sha256"
+        dns_tsig_secret: "dGVzdHNlY3JldGtleWZvcm1vbGVjdWxldGVzdA=="
+        ddns_key_name: "ddns-key"
+        ddns_algorithm: "hmac-sha256"
+        ddns_secret: "ZGRuc3Rlc3RzZWNyZXRrZXlmb3Jtb2xlY3VsZQ=="
+        ddns_zone: "dyn.example.com"
+        ddns_ttl: 60
+        dns_domain_base: "example.com"
+        dns_admin_email: "hostmaster@example.com"
+        dns_zones:
+          - name: "example.com"
+            file: "zones/example.com.yml"
+            type: master
+            ddns_enabled: false
+        bind_user: bind
+        bind_group: bind
+        bind_config_dir: /etc/bind
+        bind_zones_dir: /var/lib/bind/zones
+        bind_log_dir: /var/log/named
+        bind_transfers_out: 10
+        vault_tsig_secret: "dGVzdHNlY3JldGtleWZvcm1vbGVjdWxldGVzdA=="
+        vault_ddns_secret: "ZGRuc3Rlc3RzZWNyZXRrZXlmb3Jtb2xlY3VsZQ=="
+        hardening_ssh_authorized_keys: []
+        hardening_ansible_user: ansible
+        nft_ssh_port: 22
+        nft_ssh_alt_port: ~
+        nft_ssh_allowed_sources: []
+        nft_dns_rate_limit_pps: 30
+        nft_dns_rate_limit_burst: 50
+        nft_dns_udp_response_maxbytes: 512
+        nft_icmp_rate_limit: "5/second"
+        nft_icmp_rate_limit_burst: 10
+        nft_conntrack_max: 65536
+        nft_log_dropped: true
+        nft_log_prefix_drop: "nft-drop: "
+        nft_log_prefix_dns_flood: "nft-dns-flood: "
+        nft_extra_tcp_ports: []
+        nft_extra_udp_ports: []
+
+  options:
+    verbose: false
+
+verifier:
+  name: ansible
+
+scenario:
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - idempotency
+    - verify
+    - cleanup
+    - destroy

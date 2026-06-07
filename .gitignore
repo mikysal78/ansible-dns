@@ -1,0 +1,42 @@
+# Ansible
+*.retry
+.cache/
+.vault_pass
+*.vault_pass
+
+# Secrets — mai committare
+group_vars/all/vault.yml
+host_vars/*/vault.yml
+**/vault.yml
+
+# Solo il template va in git, non il vault cifrato
+# Usa: ansible-vault encrypt group_vars/all/vault.yml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Molecule
+molecule/**/molecule.yml.bak
+.molecule/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temp
+/tmp/
+*.tmp

@@ -1,0 +1,55 @@
+---
+# ============================================================
+# TASKS — ddns_openwrt
+# Configura i router OpenWrt per aggiornare i record DDNS
+# via nsupdate con chiave TSIG
+# ============================================================
+# NOTA: questo role gira sui router OpenWrt, non sui server DNS
+# Richede opkg con pacchetto ddns-scripts installato
+
+- name: Installa pacchetti DDNS su OpenWrt
+  community.general.opkg:
+    name:
+      - ddns-scripts
+      - bind-client       # fornisce nsupdate
+      - curl
+    state: present
+
+- name: Deploy script ddns nsupdate
+  ansible.builtin.template:
+    src: ddns-nsupdate.sh.j2
+    dest: /usr/lib/ddns/update_nsupdate.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy chiave TSIG per nsupdate
+  ansible.builtin.template:
+    src: ddns-tsig.key.j2
+    dest: /etc/ddns/ddns.key
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Configura UCI DDNS per ogni router
+  ansible.builtin.template:
+    src: ddns-uci.sh.j2
+    dest: /tmp/ddns-setup.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Applica configurazione UCI
+  ansible.builtin.command:
+    cmd: /tmp/ddns-setup.sh
+  changed_when: true
+
+- name: Riavvia servizio DDNS
+  ansible.builtin.command:
+    cmd: /etc/init.d/ddns restart
+  changed_when: true
+
+- name: Abilita DDNS all'avvio
+  ansible.builtin.command:
+    cmd: /etc/init.d/ddns enable
+  changed_when: false

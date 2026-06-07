@@ -1,0 +1,9 @@
+# /etc/sysctl.d/99-hardening.conf
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+# ============================================================
+# Network hardening
+# ============================================================
+{% for key, value in hardening_sysctl_settings.items() %}
+{{ key }} = {{ value }}
+{% endfor %}

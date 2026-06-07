@@ -1,0 +1,23 @@
+[Unit]
+Description=BIND9 Exporter for Prometheus
+After=network-online.target bind9.service
+Wants=network-online.target
+Requires=bind9.service
+
+[Service]
+Type=simple
+User=bind_exporter
+Group=bind_exporter
+ExecStart=/usr/local/bin/bind_exporter \
+  --web.listen-address="127.0.0.1:{{ bind_exporter_port }}" \
+  --bind.stats-url="{{ bind_exporter_bind_stats_url }}" \
+  --bind.stats-groups="server,view,tasks"
+Restart=always
+RestartSec=10s
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

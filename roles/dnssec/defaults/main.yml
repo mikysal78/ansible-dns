@@ -1,0 +1,40 @@
+---
+# ============================================================
+# DEFAULTS — dnssec
+# Usa BIND dnssec-policy (inline signing automatico)
+# Richiede BIND 9.16+ (Debian Trixie ha 9.20)
+# ============================================================
+
+# Policy DNSSEC da usare (nome della policy in named.conf)
+# "default" = policy built-in di BIND (algoritmo ed25519, rotazione automatica)
+# Oppure usa il nome custom definito in dnssec_custom_policy
+dnssec_policy_name: "dns-infra-policy"
+
+# Algoritmo per le chiavi
+# Ed25519 è moderno, veloce, sicuro. ECDSAP256SHA256 è più compatibile.
+dnssec_algorithm: "ed25519"
+
+# Durata validità firme (signature validity)
+dnssec_sig_validity: "P14D"      # 14 giorni
+dnssec_sig_refresh:  "P3D"       # rinnova le firme 3 giorni prima della scadenza
+
+# KSK (Key Signing Key) — rotazione annuale
+dnssec_ksk_lifetime: "P1Y"       # 1 anno
+dnssec_ksk_algorithm: "ed25519"
+
+# ZSK (Zone Signing Key) — rotazione trimestrale
+dnssec_zsk_lifetime: "P90D"      # 90 giorni
+dnssec_zsk_algorithm: "ed25519"
+
+# NSEC3 per oscurare l'enumerazione delle zone
+# Se false usa NSEC (più semplice ma enumerabile)
+dnssec_use_nsec3: true
+dnssec_nsec3_iterations: 0       # 0 è raccomandato da RFC 9276 (2022)
+dnssec_nsec3_salt_length: 0      # salt vuoto raccomandato
+
+# Directory dove BIND salva le chiavi DNSSEC
+dnssec_key_directory: "/var/lib/bind/keys"
+
+# DS record: dopo la firma, il role stampa i DS record
+# da inviare al registrar per la chain of trust
+dnssec_print_ds: true

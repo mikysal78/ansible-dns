@@ -1,0 +1,62 @@
+---
+# ============================================================
+# TASKS — packages
+# Installa pacchetti base, utils, sicurezza
+# Rimuove pacchetti non necessari
+# ============================================================
+
+- name: Aggiorna cache apt
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Installa pacchetti base
+  ansible.builtin.apt:
+    name: "{{ packages_base }}"
+    state: present
+
+- name: Installa pacchetti di monitoring e utilità
+  ansible.builtin.apt:
+    name: "{{ packages_utils }}"
+    state: present
+  ignore_errors: true   # alcuni potrebbero non esistere su Trixie
+
+- name: Installa pacchetti di sicurezza
+  ansible.builtin.apt:
+    name: "{{ packages_security }}"
+    state: present
+
+- name: Rimuovi pacchetti non necessari
+  ansible.builtin.apt:
+    name: "{{ packages_to_remove }}"
+    state: absent
+    purge: true
+  ignore_errors: true
+
+- name: Esegui autoremove
+  ansible.builtin.apt:
+    autoremove: true
+
+- name: Abilita sysstat per raccolta metriche storiche
+  ansible.builtin.lineinfile:
+    path: /etc/default/sysstat
+    regexp: "^ENABLED="
+    line: 'ENABLED="true"'
+  notify: restart sysstat
+
+- name: Configura logwatch per report giornaliero
+  ansible.builtin.lineinfile:
+    path: /etc/logwatch/conf/logwatch.conf
+    regexp: "^MailTo"
+    line: "MailTo = root"
+    create: true
+
+- name: Mostra versione BIND9 installata
+  ansible.builtin.command:
+    cmd: named -v
+  register: bind_version
+  changed_when: false
+
+- name: Info versione
+  ansible.builtin.debug:
+    msg: "BIND9: {{ bind_version.stdout }}"

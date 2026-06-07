@@ -1,0 +1,15 @@
+// named.conf.local — SECONDARY
+// Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+{% for zone in dns_zones %}
+zone "{{ zone.name }}" {
+    type slave;
+    file "/var/cache/bind/db.{{ zone.name }}";
+    masters {
+        {{ dns_primary_ip }} key "{{ dns_tsig_key_name }}";
+    };
+    allow-notify { {{ dns_primary_ip }}; };
+    allow-transfer { none; };
+};
+
+{% endfor %}

@@ -1,0 +1,64 @@
+---
+# ============================================================
+# DEFAULTS — packages
+# Pacchetti installati su tutti i server DNS
+# ============================================================
+
+packages_base:
+  - curl
+  - wget
+  - git
+  - vim
+  - less
+  - unzip
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - apt-transport-https
+
+packages_utils:
+  # Monitoring e diagnostica
+  - htop
+  - iotop
+  - nethogs
+  - ncdu
+  - nload
+  - iftop
+  - sysstat        # sar, iostat, mpstat
+  - dstat
+  - lsof
+  - strace
+  - tcpdump
+  - net-tools      # netstat, ifconfig (legacy ma utile)
+  - iproute2
+  - iputils-ping
+  - mtr-tiny
+  - traceroute
+  # DNS tools
+  - dnsutils       # dig, nslookup, host
+  - ldnsutils      # drill
+  - whois
+  # Performance
+  - perf-tools-unstable
+  - linux-perf
+
+packages_security:
+  - auditd
+  - audispd-plugins
+  - fail2ban
+  - rkhunter
+  - binutils
+  - unhide
+  - lynis           # security audit tool
+  - chkrootkit
+  - logwatch
+  - acl
+  - attr
+
+packages_to_remove:
+  # Rimuovi pacchetti non necessari su un server dedicato
+  - telnet
+  - rsh-client
+  - ftp
+  - nfs-common
+  - portmap
