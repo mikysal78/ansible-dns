@@ -1,0 +1,14 @@
+---
+- name: stop vm
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    state:            stopped
+    force:            true
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost

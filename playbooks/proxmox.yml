@@ -1,0 +1,140 @@
+---
+# ============================================================
+# PLAYBOOK — proxmox.yml
+# Provisioning completo infrastruttura DNS su Proxmox
+#
+# Uso:
+#   ansible-playbook playbooks/proxmox.yml --ask-vault-pass
+#
+# Prerequisiti:
+#   - Template Debian Trixie cloud-init presente su Proxmox (VMID 9000)
+#     Vedi: playbooks/proxmox-prepare-template.yml
+#   - Token API Proxmox configurato in vault
+#   - Chiave SSH pubblica in cloudinit_ssh_authorized_keys
+#
+# Flusso:
+#   1. Crea VM primary su Proxmox via API
+#   2. Configura hardware (CPU host, RAM, disco, rete VirtIO)
+#   3. Applica cloud-init (IP statico, utente ansible, pacchetti base)
+#   4. Attende avvio e completamento cloud-init
+#   5. Snapshot baseline pre-deploy DNS
+#   6. Stampa istruzioni per VPS secondari
+# ============================================================
+
+- name: "Proxmox — Provisioning VM DNS Primary"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verifica variabili obbligatorie
+      ansible.builtin.assert:
+        that:
+          - vault_proxmox_token_secret is defined
+          - cloudinit_ssh_authorized_keys | length > 0
+          - proxmox_primary_ip is defined
+          - proxmox_primary_gw is defined
+        fail_msg: |
+          Variabili mancanti. Verifica:
+          - vault_proxmox_token_secret in vault.yml (cifrato)
+          - cloudinit_ssh_authorized_keys in main.yml o host_vars
+          - proxmox_primary_ip e proxmox_primary_gw in main.yml
+
+    - name: Mostra piano di provisioning
+      ansible.builtin.debug:
+        msg: |
+          ============================================================
+          PROVISIONING DNS PRIMARY SU PROXMOX
+          ============================================================
+          Proxmox host  : {{ proxmox_host }}:{{ proxmox_port }}
+          Nodo          : {{ proxmox_node }}
+          Template VMID : {{ proxmox_template_vmid }}
+          Nuova VM      : {{ proxmox_primary_name }} (VMID {{ proxmox_primary_vmid }})
+          IP            : {{ proxmox_primary_ip }}/{{ proxmox_primary_netmask }}
+          GW            : {{ proxmox_primary_gw }}
+          CPU           : {{ proxmox_primary_cores }} vCPU ({{ proxmox_cpu_type }})
+          RAM           : {{ proxmox_primary_memory }} MB
+          Disco         : {{ proxmox_primary_disk_size }}
+          Storage       : {{ proxmox_storage }}
+          ============================================================
+
+  roles:
+    - role: proxmox_vm
+
+  post_tasks:
+    - name: Verifica raggiungibilità SSH della VM
+      ansible.builtin.wait_for:
+        host:    "{{ proxmox_primary_ip }}"
+        port:    22
+        timeout: 30
+      register: ssh_check
+      failed_when: false
+
+    - name: "=== PROVISIONING COMPLETATO ==="
+      ansible.builtin.debug:
+        msg: |
+          ============================================================
+          VM DNS PRIMARY PRONTA
+
+          Nome    : {{ proxmox_primary_name }}
+          VMID    : {{ proxmox_primary_vmid }}
+          IP      : {{ proxmox_primary_ip }}
+          SSH     : {{ 'RAGGIUNGIBILE' if ssh_check.elapsed is defined else 'NON RAGGIUNGIBILE — verifica rete' }}
+
+          Snapshot baseline: {{ proxmox_snapshot_name }}
+
+          PROSSIMI PASSI:
+          ─────────────────────────────────────────────────────────
+          1. Aggiorna inventory/hosts.yml con l'IP della VM:
+             ns-primary:
+               ansible_host: {{ proxmox_primary_ip }}
+
+          2. Per i secondari (VPS pubblici), vedi:
+             playbooks/proxmox-secondari-checklist.yml
+
+          3. Deploy infrastruttura DNS:
+             ansible-playbook playbooks/site.yml --ask-vault-pass
+          ============================================================
+
+- name: "Istruzioni VPS secondari"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Stampa checklist VPS secondari
+      ansible.builtin.debug:
+        msg: |
+          ============================================================
+          CHECKLIST VPS SECONDARI (configurazione manuale)
+          ============================================================
+          Per ogni VPS secondario (ns1, ns2, ...):
+
+          1. Acquista VPS con Debian Trixie:
+             - Hetzner CX11  (~4€/mese) — https://hetzner.com/cloud
+             - Contabo VPS S (~5€/mese) — https://contabo.com
+             - BuyVM         (~3€/mese) — https://buyvm.net
+
+          2. Abilita accesso SSH con chiave pubblica
+
+          3. Annota gli IP pubblici e aggiornali in inventory/hosts.yml:
+             dns_secondary:
+               hosts:
+                 ns1:
+                   ansible_host: <IP_VPS_1>
+                 ns2:
+                   ansible_host: <IP_VPS_2>
+
+          4. Aggiorna dns_secondary_ips in group_vars/all/main.yml:
+             dns_secondary_ips:
+               - "<IP_VPS_1>"
+               - "<IP_VPS_2>"
+
+          5. Esegui il deploy:
+             ansible-playbook playbooks/site.yml --ask-vault-pass
+
+          6. Registra ns1 e ns2 come nameserver del dominio
+             presso il tuo registrar DNS.
+
+          7. Pubblica i DS record DNSSEC:
+             ansible-playbook playbooks/dnssec-status.yml --ask-vault-pass
+          ============================================================

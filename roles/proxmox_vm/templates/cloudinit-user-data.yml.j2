@@ -1,0 +1,78 @@
+#cloud-config
+# user-data per {{ proxmox_primary_name }}
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+
+hostname: {{ proxmox_primary_name }}
+fqdn: {{ proxmox_primary_name }}.{{ proxmox_primary_searchdomain }}
+manage_etc_hosts: true
+
+locale: {{ cloudinit_locale }}
+timezone: {{ cloudinit_timezone }}
+
+# --- Utente ansible ---
+users:
+  - name: {{ cloudinit_user }}
+    gecos: "Ansible Automation"
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+{% if cloudinit_ssh_authorized_keys | length > 0 %}
+    ssh_authorized_keys:
+{% for key in cloudinit_ssh_authorized_keys %}
+      - {{ key }}
+{% endfor %}
+{% endif %}
+
+# --- Blocca accesso root ---
+disable_root: true
+
+# --- Pacchetti iniziali ---
+package_update: true
+package_upgrade: true
+packages:
+{% for pkg in cloudinit_packages %}
+  - {{ pkg }}
+{% endfor %}
+
+# --- Comandi post-installazione ---
+runcmd:
+  # Abilita e avvia qemu-guest-agent
+  - systemctl enable --now qemu-guest-agent
+
+  # Configura journald per non riempire disco
+  - mkdir -p /etc/systemd/journald.conf.d
+  - |
+    cat > /etc/systemd/journald.conf.d/size.conf << 'EOF'
+    [Journal]
+    SystemMaxUse=200M
+    SystemKeepFree=500M
+    MaxRetentionSec=1month
+    EOF
+  - systemctl restart systemd-journald
+
+  # Imposta hostname correttamente
+  - hostnamectl set-hostname {{ proxmox_primary_name }}
+
+  # Disabilita swap su disco (opzionale, decommentare se vuoi)
+  # - swapoff -a
+  # - sed -i '/swap/d' /etc/fstab
+
+  # Segnale cloud-init completato
+  - touch /var/lib/cloud/instance/boot-finished
+
+# --- Scrittura file di marker ---
+write_files:
+  - path: /etc/ansible-managed
+    content: |
+      Questo server è gestito da Ansible.
+      Creato: {{ ansible_date_time.iso8601 }}
+      Ruolo: DNS Primary (hidden master)
+      Non modificare manualmente la configurazione.
+    owner: root:root
+    permissions: '0644'
+
+final_message: |
+  Cloud-init completato su {{ proxmox_primary_name }}.
+  IP: {{ proxmox_primary_ip }}
+  Pronto per deploy Ansible DNS.

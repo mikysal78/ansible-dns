@@ -1,0 +1,66 @@
+---
+# ============================================================
+# TASK — cloudinit_snippet.yml
+# Genera lo snippet cloud-init e lo carica su Proxmox
+# via API (storage snippets)
+# ============================================================
+
+- name: Crea directory temporanea locale per snippet
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: proxmox-cloudinit
+  register: tmp_dir
+  delegate_to: localhost
+
+- name: Genera user-data cloud-init
+  ansible.builtin.template:
+    src: cloudinit-user-data.yml.j2
+    dest: "{{ tmp_dir.path }}/user-data-{{ proxmox_primary_name }}.yml"
+    mode: "0644"
+  delegate_to: localhost
+
+- name: Genera network-config cloud-init
+  ansible.builtin.template:
+    src: cloudinit-network-config.yml.j2
+    dest: "{{ tmp_dir.path }}/network-config-{{ proxmox_primary_name }}.yml"
+    mode: "0644"
+  delegate_to: localhost
+
+- name: Carica user-data su Proxmox (storage snippets via API)
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}:{{ proxmox_port }}/api2/json/nodes/{{ proxmox_node }}/storage/{{ proxmox_iso_storage }}/upload"
+    method: POST
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ vault_proxmox_token_secret }}"
+    body_format: form-multipart
+    body:
+      content: snippets
+      filename: "user-data-{{ proxmox_primary_name }}.yml"
+      file:
+        content: "{{ lookup('file', tmp_dir.path + '/user-data-' + proxmox_primary_name + '.yml') }}"
+        mime_type: text/plain
+    validate_certs: "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+  register: upload_userdata
+
+- name: Carica network-config su Proxmox
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}:{{ proxmox_port }}/api2/json/nodes/{{ proxmox_node }}/storage/{{ proxmox_iso_storage }}/upload"
+    method: POST
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ vault_proxmox_token_secret }}"
+    body_format: form-multipart
+    body:
+      content: snippets
+      filename: "network-config-{{ proxmox_primary_name }}.yml"
+      file:
+        content: "{{ lookup('file', tmp_dir.path + '/network-config-' + proxmox_primary_name + '.yml') }}"
+        mime_type: text/plain
+    validate_certs: "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+
+- name: Pulisci directory temporanea
+  ansible.builtin.file:
+    path: "{{ tmp_dir.path }}"
+    state: absent
+  delegate_to: localhost

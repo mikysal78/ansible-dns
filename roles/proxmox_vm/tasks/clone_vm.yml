@@ -1,0 +1,42 @@
+---
+# ============================================================
+# TASK — clone_vm.yml
+# Clona il template cloud-init e configura la VM primary
+# ============================================================
+
+- name: Clona template → VM primary DNS
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    clone:            "{{ proxmox_template_vmid }}"
+    name:             "{{ proxmox_primary_name }}"
+    description:      "{{ proxmox_primary_desc }}"
+    storage:          "{{ proxmox_storage }}"
+    full:             true              # clone completo, non linked
+    format:           unspecified
+    state:            present
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  register: vm_clone
+  delegate_to: localhost
+
+- name: Attendi che il clone sia completato
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    state:            current
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  register: vm_status
+  retries: 30
+  delay: 5
+  until: vm_status.proxmox_vms is defined
+  delegate_to: localhost

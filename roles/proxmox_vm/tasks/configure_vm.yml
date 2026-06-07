@@ -1,0 +1,106 @@
+---
+# ============================================================
+# TASK — configure_vm.yml
+# Configura CPU, RAM, disco, rete e cloud-init sulla VM
+# ============================================================
+
+- name: Configura hardware VM (CPU, RAM, tipo macchina)
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    name:             "{{ proxmox_primary_name }}"
+    description:      "{{ proxmox_primary_desc }}"
+    # CPU
+    cores:            "{{ proxmox_primary_cores }}"
+    vcpus:            "{{ proxmox_primary_cores }}"
+    cpu:              "{{ proxmox_cpu_type }}"
+    # RAM
+    memory:           "{{ proxmox_primary_memory }}"
+    balloon:          0                 # disabilita balloon — DNS server vuole RAM stabile
+    # Macchina
+    machine:          "{{ proxmox_machine_type }}"
+    bios:             "{{ proxmox_bios }}"
+    # Opzioni
+    onboot:           "{{ proxmox_onboot }}"
+    protection:       "{{ proxmox_protection }}"
+    # Agent
+    agent:            "enabled={{ proxmox_agent | ternary('1','0') }}"
+    # Tag identificativo
+    tags:
+      - dns
+      - primary
+      - ansible-managed
+    state:            present
+    update:           true
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+
+- name: Ridimensiona disco principale
+  community.general.proxmox_disk:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    disk:             scsi0
+    size:             "{{ proxmox_primary_disk_size }}"
+    state:            resized
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+
+- name: Configura interfaccia di rete (VirtIO)
+  community.general.proxmox_nic:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    interface:        net0
+    bridge:           "{{ proxmox_bridge }}"
+    model:            virtio
+    tag:              "{{ proxmox_vlan_tag | default(omit) }}"
+    state:            present
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+
+- name: Configura cloud-init (IP statico, utente, SSH key, snippet)
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    # Cloud-init networking
+    ipconfig:
+      ipconfig0: "ip={{ proxmox_primary_ip }}/{{ proxmox_primary_netmask }},gw={{ proxmox_primary_gw }}"
+    nameservers:
+      - "{{ proxmox_primary_dns }}"
+    searchdomains: "{{ proxmox_primary_searchdomain }}"
+    # Cloud-init user
+    ciuser:     "{{ cloudinit_user }}"
+    cipassword: "!"                    # disabilita login con password
+    sshkeys:    "{{ cloudinit_ssh_authorized_keys | join('\n') }}"
+    # Snippet custom per pacchetti e configurazione avanzata
+    cicustom:   "user={{ proxmox_iso_storage }}:snippets/user-data-{{ proxmox_primary_name }}.yml,network={{ proxmox_iso_storage }}:snippets/network-config-{{ proxmox_primary_name }}.yml"
+    state:      present
+    update:     true
+    validate_certs: "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+
+- name: Rigenera immagine cloud-init
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}:{{ proxmox_port }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ proxmox_primary_vmid }}/cloudinit"
+    method: PUT
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ vault_proxmox_token_secret }}"
+    validate_certs: "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost

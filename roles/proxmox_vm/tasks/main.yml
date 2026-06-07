@@ -1,0 +1,63 @@
+---
+# ============================================================
+# TASKS — proxmox_vm
+# Crea e configura la VM primary DNS su Proxmox via API
+# ============================================================
+
+- name: "[proxmox] Verifica che il template esista"
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_template_vmid }}"
+    state:            current
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  register: template_check
+  failed_when: false
+
+- name: "[proxmox] Abort se il template non esiste"
+  ansible.builtin.fail:
+    msg: |
+      Template VMID {{ proxmox_template_vmid }} ({{ proxmox_template_name }}) non trovato su Proxmox.
+      Consulta la sezione 'Preparazione template' nel README per crearlo.
+  when: template_check.failed or template_check.proxmox_vms is not defined
+
+- name: "[proxmox] Verifica se la VM primary esiste già"
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    state:            current
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  register: vm_check
+  failed_when: false
+
+- name: "[proxmox] Genera snippet cloud-init"
+  ansible.builtin.include_tasks: tasks/cloudinit_snippet.yml
+  when: vm_check.failed or vm_check.proxmox_vms is not defined
+
+- name: "[proxmox] Clona template → VM primary"
+  ansible.builtin.include_tasks: tasks/clone_vm.yml
+  when: vm_check.failed or vm_check.proxmox_vms is not defined
+
+- name: "[proxmox] VM primary già esistente — skip creazione"
+  ansible.builtin.debug:
+    msg: "VM {{ proxmox_primary_name }} (VMID {{ proxmox_primary_vmid }}) già presente — skip creazione."
+  when: not (vm_check.failed or vm_check.proxmox_vms is not defined)
+
+- name: "[proxmox] Configura hardware VM"
+  ansible.builtin.include_tasks: tasks/configure_vm.yml
+
+- name: "[proxmox] Avvia VM e attendi cloud-init"
+  ansible.builtin.include_tasks: tasks/start_and_wait.yml
+
+- name: "[proxmox] Snapshot post-creazione"
+  ansible.builtin.include_tasks: tasks/snapshot.yml
+  when: proxmox_snapshot_after_create

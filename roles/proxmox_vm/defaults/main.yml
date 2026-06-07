@@ -1,0 +1,80 @@
+---
+# ============================================================
+# DEFAULTS — proxmox_vm
+# Crea VM Debian Trixie via API Proxmox con cloud-init
+# ============================================================
+
+# --- Connessione API Proxmox ---
+proxmox_host: "proxmox.lan"          # hostname o IP del nodo Proxmox
+proxmox_port: 8006
+proxmox_user: "ansible@pam"          # utente API Proxmox
+proxmox_token_id: "ansible"          # nome token API
+# proxmox_token_secret: in vault     → vault_proxmox_token_secret
+proxmox_node: "pve"                  # nome nodo Proxmox (rndc nodelist)
+proxmox_verify_ssl: false            # true se hai certificato valido su Proxmox
+
+# --- Template cloud-init ---
+# ID del template Debian Trixie cloud-init già presente su Proxmox
+# Vedi README per come crearlo
+proxmox_template_vmid: 9000
+proxmox_template_name: "debian-trixie-cloudinit"
+
+# --- Storage ---
+proxmox_storage: "local-lvm"         # storage per dischi VM
+proxmox_iso_storage: "local"         # storage per snippet cloud-init
+
+# --- Rete ---
+proxmox_bridge: "vmbr0"
+proxmox_vlan_tag: ~                  # null = no VLAN tag
+
+# --- VM Primary DNS ---
+proxmox_primary_vmid: 200
+proxmox_primary_name: "dns-primary"
+proxmox_primary_desc: "BIND9 Hidden Primary — DNS Infrastructure"
+proxmox_primary_cores: 2
+proxmox_primary_memory: 2048         # MB
+proxmox_primary_disk_size: "40G"
+proxmox_primary_ip: "192.168.1.10"
+proxmox_primary_gw: "192.168.1.1"
+proxmox_primary_netmask: "24"
+proxmox_primary_dns: "192.168.1.1"
+proxmox_primary_searchdomain: "lan"
+
+# --- Disco layout (partizioni via cloud-init) ---
+# / + /var separati per proteggere sistema da I/O Prometheus
+proxmox_primary_disk_root: "15G"
+proxmox_primary_disk_var: "20G"
+
+# --- Cloud-init generale ---
+cloudinit_user: "ansible"
+cloudinit_timezone: "Europe/Rome"
+cloudinit_locale: "it_IT.UTF-8"
+cloudinit_packages:
+  - qemu-guest-agent
+  - python3
+  - python3-apt
+  - sudo
+  - curl
+  - ca-certificates
+
+# Chiave SSH pubblica per accesso cloud-init
+# Aggiungila qui o in host_vars/
+cloudinit_ssh_authorized_keys: []
+# - "ssh-ed25519 AAAA... admin@host"
+
+# --- Opzioni VM ---
+proxmox_machine_type: "q35"
+proxmox_bios: "ovmf"                 # UEFI
+proxmox_cpu_type: "host"             # passthrough per AES-NI e rdrand
+proxmox_onboot: true
+proxmox_agent: true                  # qemu-guest-agent
+proxmox_protection: false
+
+# --- Snapshot post-creazione ---
+proxmox_snapshot_after_create: true
+proxmox_snapshot_name: "post-cloudinit-base"
+proxmox_snapshot_description: "Snapshot base post cloud-init — prima del deploy DNS"
+
+# --- Timeout ---
+proxmox_vm_start_timeout: 120        # secondi attesa avvio VM
+proxmox_cloudinit_timeout: 180       # secondi attesa cloud-init completato

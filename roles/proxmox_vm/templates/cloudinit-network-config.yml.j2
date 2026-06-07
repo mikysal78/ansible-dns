@@ -1,0 +1,21 @@
+version: 2
+ethernets:
+  # Prima interfaccia — nome deterministico via udev
+  ens18:
+    match:
+      name: "en*"
+    set-name: ens18
+    addresses:
+      - {{ proxmox_primary_ip }}/{{ proxmox_primary_netmask }}
+    gateway4: {{ proxmox_primary_gw }}
+    nameservers:
+      addresses:
+        - {{ proxmox_primary_dns }}
+        - 1.1.1.1
+      search:
+        - {{ proxmox_primary_searchdomain }}
+    dhcp4: false
+    dhcp6: false
+    # Ottimizzazioni per server DNS
+    mtu: 1500
+    wakeonlan: false

@@ -1,0 +1,150 @@
+---
+# ============================================================
+# PLAYBOOK — proxmox-prepare-template.yml
+# Crea il template Debian Trixie cloud-init su Proxmox
+#
+# Uso:
+#   ansible-playbook playbooks/proxmox-prepare-template.yml \
+#     --ask-vault-pass
+#
+# Cosa fa:
+#   1. Scarica l'immagine cloud Debian Trixie (genericcloud)
+#   2. Crea una VM vuota con VMID 9000
+#   3. Importa il disco cloud come scsi0
+#   4. Configura cloud-init drive, seriale, VGA
+#   5. Converte in template
+#
+# Idempotente: se il template esiste già, skippa tutto.
+# ============================================================
+
+- name: "Proxmox — Prepara template Debian Trixie cloud-init"
+  hosts: "{{ proxmox_host }}"
+  gather_facts: true
+  become: true
+
+  vars:
+    debian_trixie_url: "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
+    debian_image_path: "/var/lib/vz/template/iso/debian-13-genericcloud-amd64.qcow2"
+    template_vmid:     "{{ proxmox_template_vmid }}"
+    template_name:     "{{ proxmox_template_name }}"
+    template_storage:  "{{ proxmox_storage }}"
+    template_memory:   1024
+    template_cores:    1
+
+  tasks:
+
+    - name: Verifica se il template esiste già
+      ansible.builtin.command:
+        cmd: "qm status {{ template_vmid }}"
+      register: template_exists
+      changed_when: false
+      failed_when: false
+
+    - name: "Template VMID {{ template_vmid }} già presente — skip"
+      ansible.builtin.debug:
+        msg: "Template {{ template_name }} (VMID {{ template_vmid }}) già presente. Niente da fare."
+      when: template_exists.rc == 0
+
+    - name: Scarica immagine Debian Trixie genericcloud
+      ansible.builtin.get_url:
+        url:  "{{ debian_trixie_url }}"
+        dest: "{{ debian_image_path }}"
+        mode: "0644"
+        checksum: "sha512:{{ debian_trixie_sha512 | default(omit) }}"
+      when: template_exists.rc != 0
+
+    - name: Installa libguestfs-tools per ottimizzare immagine
+      ansible.builtin.apt:
+        name:
+          - libguestfs-tools
+          - qemu-utils
+        state: present
+      when: template_exists.rc != 0
+
+    - name: Ottimizza immagine — installa qemu-guest-agent e pulisci
+      ansible.builtin.command:
+        cmd: >
+          virt-customize -a {{ debian_image_path }}
+          --install qemu-guest-agent,cloud-init,python3,sudo
+          --run-command 'systemctl enable qemu-guest-agent'
+          --run-command 'apt-get clean'
+          --run-command 'truncate -s 0 /etc/machine-id'
+          --run-command 'rm -f /var/lib/dbus/machine-id'
+          --run-command 'ln -sf /etc/machine-id /var/lib/dbus/machine-id'
+          --selinux-relabel
+      when: template_exists.rc != 0
+      environment:
+        LIBGUESTFS_BACKEND: direct
+
+    - name: Crea VM base per il template
+      ansible.builtin.command:
+        cmd: >
+          qm create {{ template_vmid }}
+          --name {{ template_name }}
+          --memory {{ template_memory }}
+          --cores {{ template_cores }}
+          --cpu host
+          --machine q35
+          --bios ovmf
+          --net0 virtio,bridge={{ proxmox_bridge }}
+          --ostype l26
+          --description "Template Debian Trixie cloud-init — generato da Ansible"
+          --tags template,debian,trixie,cloudinit
+      when: template_exists.rc != 0
+
+    - name: Importa disco cloud come scsi0
+      ansible.builtin.command:
+        cmd: >
+          qm importdisk {{ template_vmid }}
+          {{ debian_image_path }}
+          {{ template_storage }}
+          --format qcow2
+      when: template_exists.rc != 0
+      register: import_disk
+
+    - name: Configura scsi0 come disco di avvio
+      ansible.builtin.command:
+        cmd: >
+          qm set {{ template_vmid }}
+          --scsihw virtio-scsi-pci
+          --scsi0 {{ template_storage }}:vm-{{ template_vmid }}-disk-0
+          --boot c
+          --bootdisk scsi0
+      when: template_exists.rc != 0
+
+    - name: Aggiungi drive cloud-init
+      ansible.builtin.command:
+        cmd: >
+          qm set {{ template_vmid }}
+          --ide2 {{ template_storage }}:cloudinit
+          --serial0 socket
+          --vga serial0
+      when: template_exists.rc != 0
+
+    - name: Abilita qemu-guest-agent sul template
+      ansible.builtin.command:
+        cmd: "qm set {{ template_vmid }} --agent enabled=1"
+      when: template_exists.rc != 0
+
+    - name: Converti VM in template
+      ansible.builtin.command:
+        cmd: "qm template {{ template_vmid }}"
+      when: template_exists.rc != 0
+
+    - name: Pulizia immagine scaricata
+      ansible.builtin.file:
+        path: "{{ debian_image_path }}"
+        state: absent
+      when: template_exists.rc != 0
+
+    - name: "=== TEMPLATE PRONTO ==="
+      ansible.builtin.debug:
+        msg: |
+          Template creato con successo:
+          Nome  : {{ template_name }}
+          VMID  : {{ template_vmid }}
+          Nodo  : {{ proxmox_node }}
+
+          Ora esegui:
+          ansible-playbook playbooks/proxmox.yml --ask-vault-pass
+      when: template_exists.rc != 0

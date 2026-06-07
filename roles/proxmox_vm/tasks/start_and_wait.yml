@@ -1,0 +1,69 @@
+---
+# ============================================================
+# TASK — start_and_wait.yml
+# Avvia la VM e attende che cloud-init completi
+# ============================================================
+
+- name: Avvia VM primary
+  community.general.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_port:         "{{ proxmox_port }}"
+    api_user:         "{{ proxmox_user }}"
+    api_token_id:     "{{ proxmox_token_id }}"
+    api_token_secret: "{{ vault_proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    vmid:             "{{ proxmox_primary_vmid }}"
+    state:            started
+    validate_certs:   "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+  register: vm_start
+
+- name: "Attendi che la VM risponda su SSH ({{ proxmox_vm_start_timeout }}s)"
+  ansible.builtin.wait_for:
+    host:    "{{ proxmox_primary_ip }}"
+    port:    22
+    timeout: "{{ proxmox_vm_start_timeout }}"
+    sleep:   5
+  delegate_to: localhost
+
+- name: Attendi completamento cloud-init
+  ansible.builtin.raw: |
+    cloud-init status --wait 2>/dev/null || \
+    while [ ! -f /var/lib/cloud/instance/boot-finished ]; do sleep 5; done
+  become: true
+  vars:
+    ansible_host: "{{ proxmox_primary_ip }}"
+    ansible_user: "{{ cloudinit_user }}"
+  register: cloudinit_wait
+  retries: 12
+  delay: 15
+  until: cloudinit_wait.rc == 0
+
+- name: Verifica che qemu-guest-agent risponda
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}:{{ proxmox_port }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ proxmox_primary_vmid }}/agent/ping"
+    method: POST
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ vault_proxmox_token_secret }}"
+    validate_certs: "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+  retries: 10
+  delay: 10
+  until: not (agent_ping.status | default(500)) == 500
+  register: agent_ping
+  failed_when: false
+
+- name: Recupera IP effettivo dalla VM via guest agent
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}:{{ proxmox_port }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ proxmox_primary_vmid }}/agent/network-get-interfaces"
+    method: GET
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_user }}!{{ proxmox_token_id }}={{ vault_proxmox_token_secret }}"
+    validate_certs: "{{ proxmox_verify_ssl }}"
+  delegate_to: localhost
+  register: vm_network
+  failed_when: false
+
+- name: Mostra IP VM
+  ansible.builtin.debug:
+    msg: "VM {{ proxmox_primary_name }} avviata — IP: {{ proxmox_primary_ip }}"
