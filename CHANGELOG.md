@@ -12,6 +12,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Role `proxmox_vm` — provisioning VM primary su Proxmox VE via API + cloud-init
 - Playbook `proxmox.yml`, `proxmox-prepare-template.yml`, `proxmox-snapshot.yml`
 - Gruppi `proxmox` e `openwrt_routers` nell'inventory
+- Sezione README per uso VM OVH come secondari (firewall Edge, Anti-DDoS)
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

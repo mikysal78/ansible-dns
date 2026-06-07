@@ -18,6 +18,7 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - [Prerequisiti](#prerequisiti)
 - [Struttura del progetto](#struttura-del-progetto)
 - [Proxmox — Provisioning VM](#proxmox--provisioning-vm)
+- [OVH — VM secondarie](#ovh--vm-secondarie)
 - [Setup iniziale](#setup-iniziale)
 - [Configurazione](#configurazione)
 - [Deploy DNS](#deploy-dns)
@@ -165,7 +166,7 @@ ansible-galaxy collection install -r requirements.yml
 ### Server DNS
 - **OS**: Debian Trixie (13)
 - **Primary**: 2 vCPU, 2GB RAM, 40GB disco (VM Proxmox)
-- **Secondari**: 1 vCPU, 512MB RAM, 10GB (VPS pubblici)
+- **Secondari**: 1 vCPU, 512MB RAM, 10GB (VPS pubblici — OVH, Hetzner, Contabo, ecc.)
 
 ### Router OpenWrt
 - OpenWrt 23.x o superiore
@@ -409,6 +410,98 @@ cloudinit_ssh_authorized_keys:
 ```
 
 ---
+
+---
+
+## OVH — VM secondarie
+
+Le VM OVH funzionano come **secondari pubblici** insieme (o al posto) di Hetzner/Contabo. I ruoli `bind9_secondary`, `nftables`, `hardening`, `packages` e `monitoring` non dipendono da Proxmox: agiscono su qualsiasi Debian Trixie raggiungibile via SSH.
+
+> **Provisioning**: a differenza del primary su Proxmox (creazione VM automatizzata via API), le VM OVH vengono ordinate manualmente dal pannello OVH. Ansible automatizza solo la configurazione successiva. Per OVH Public Cloud (OpenStack) è teoricamente possibile automatizzare anche la creazione con la collection `openstack.cloud`, ma non è incluso in questo progetto.
+
+### 1. Ordina la VM OVH
+
+Prodotti adatti come secondario DNS:
+- **OVH VPS** (da ~3,50€/mese) — sufficiente: 1 vCPU, 2GB RAM
+- **OVH Public Cloud** (istanze a consumo)
+- **OVH Bare Metal / Eco** (overkill per un secondario, ma valido)
+
+Durante l'ordine seleziona **Debian Trixie (13)** come sistema operativo e carica la tua **chiave SSH pubblica**.
+
+### 2. Configura il firewall OVH (Edge Network Firewall)
+
+Questo è il punto più importante e specifico di OVH. L'Edge Network Firewall di OVH ha tre caratteristiche che vanno comprese:
+
+- È **stateless** e integrato nell'infrastruttura Anti-DDoS: filtra solo il traffico proveniente da **fuori** dalla rete OVH. Il traffico interno OVH raggiunge comunque il server su qualsiasi porta.
+- **Non sostituisce** il firewall a livello server: per questo il role `nftables` resta indispensabile (protegge anche dal traffico interno OVH e applica rate limiting + anti-amplification).
+- La logica delle **priorità è invertita**: numeri più bassi hanno priorità più alta, e serve **sempre** una regola finale di blocco esplicita, altrimenti le sole regole di autorizzazione sono inefficaci.
+
+Configurazione consigliata nell'Edge Network Firewall (pannello OVH → IP → firewall):
+
+| Priorità | Azione | Protocollo | Porta | Opzione | Note |
+|---|---|---|---|---|---|
+| 0 | Authorize | TCP | 22 | — | SSH (meglio se da IP fisso) |
+| 1 | Authorize | UDP | 53 | — | query DNS |
+| 2 | Authorize | TCP | 53 | — | query DNS grandi + AXFR |
+| 3 | Authorize | TCP | — | established | risposte sessioni TCP |
+| 4 | Authorize | ICMP | — | — | ping / traceroute |
+| 19 | Deny | IPv4 | — | — | **blocco finale obbligatorio** |
+
+> Essendo stateless, il firewall OVH non tiene traccia delle connessioni: la regola `TCP established` (priorità 3) è necessaria per le risposte. Per il DNS su UDP non serve, perché ogni pacchetto è indipendente.
+
+> **Attenzione Anti-DDoS**: durante un attacco la mitigazione automatica OVH può temporaneamente limitare il traffico DNS verso la VM. Avere più secondari su provider diversi (OVH + Hetzner + ...) mitiga questo rischio: se un secondario è sotto mitigazione, gli altri continuano a rispondere.
+
+### 3. Aggiungi la VM all'inventory
+
+```yaml
+# inventory/hosts.yml
+dns_secondary:
+  hosts:
+    ns1:
+      ansible_host: 203.0.113.10        # es. Hetzner
+      ansible_user: ansible
+      dns_secondary_index: 1
+    ns2-ovh:
+      ansible_host: 51.91.x.x           # IP pubblico VM OVH
+      ansible_user: ansible
+      dns_secondary_index: 2
+```
+
+```yaml
+# group_vars/all/main.yml
+dns_secondary_ips:
+  - "203.0.113.10"
+  - "51.91.x.x"          # VM OVH
+```
+
+### 4. Deploy
+
+```bash
+ansible-playbook playbooks/site.yml --limit dns_secondary --ask-vault-pass
+```
+
+### 5. Verifica
+
+```bash
+# Query diretta alla VM OVH
+dig @51.91.x.x example.com SOA
+
+# Verifica che il firewall nftables del server sia attivo
+ansible ns2-ovh -m command -a "nft list ruleset" --ask-vault-pass
+
+# Verifica zone transfer ricevuto dal primary
+ansible ns2-ovh -m command -a "rndc zonestatus example.com" --ask-vault-pass
+```
+
+### Primary su OVH (sconsigliato ma possibile)
+
+Se vuoi mettere anche il **primary** su OVH rinunciando all'hidden primary locale, funziona ma cambia il modello di sicurezza: il primary diventa raggiungibile da internet. In tal caso:
+- Le regole nftables del role primary già limitano la porta 53 a localhost e secondari
+- Apri nell'Edge Firewall OVH solo SSH + la porta 53 verso gli IP dei secondari
+- Perdi il vantaggio principale dell'architettura hidden primary (master non esposto)
+
+L'approccio consigliato resta: **primary locale su Proxmox** + **secondari pubblici su OVH/Hetzner/ecc.**
+
 
 ## Setup iniziale
 
