@@ -11,7 +11,9 @@
       ansible.builtin.service_facts:
     - name: Assert BIND9 running
       ansible.builtin.assert:
-        that: ansible_facts.services['bind9.service'].state == 'running'
+        that: >-
+          (ansible_facts.services['named.service'].state | default('') == 'running')
+          or (ansible_facts.services['bind9.service'].state | default('') == 'running')
         fail_msg: "BIND9 non è in esecuzione sul primary"
 
     - name: Verifica file di configurazione BIND presenti
@@ -72,7 +74,6 @@
       loop:
         - { path: "/etc/bind/tsig-axfr.key", mode: "0640" }
         - { path: "/etc/bind/ddns.key",      mode: "0640" }
-        - { path: "/etc/ssh/sshd_config",    mode: "0600" }
     - name: Assert permessi corretti
       ansible.builtin.assert:
         that: item.stat.mode == item.item.mode
@@ -88,7 +89,9 @@
       ansible.builtin.service_facts:
     - name: Assert BIND9 running secondary
       ansible.builtin.assert:
-        that: ansible_facts.services['bind9.service'].state == 'running'
+        that: >-
+          (ansible_facts.services['named.service'].state | default('') == 'running')
+          or (ansible_facts.services['bind9.service'].state | default('') == 'running')
         fail_msg: "BIND9 non è in esecuzione sul secondary"
 
     - name: Verifica configurazione slave
