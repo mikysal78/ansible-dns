@@ -19,12 +19,7 @@ table inet filter {
     set ssh_allowed {
         type ipv4_addr
         flags interval
-        elements = {
-{% for src in nft_ssh_allowed_sources %}
-            {{ src }}{% if not loop.last %},{% endif %}
-
-{% endfor %}
-        }
+        elements = { {{ nft_ssh_allowed_sources | join(', ') }} }
     }
 {% endif %}
 
@@ -41,12 +36,9 @@ table inet filter {
     # ----------------------------------------------------------
     set dns_secondaries {
         type ipv4_addr
-        elements = {
-{% for ip in dns_secondary_ips %}
-            {{ ip }}{% if not loop.last %},{% endif %}
-
-{% endfor %}
-        }
+{% if dns_secondary_ips | length > 0 %}
+        elements = { {{ dns_secondary_ips | join(', ') }} }
+{% endif %}
     }
 
     # ----------------------------------------------------------
@@ -120,6 +112,9 @@ table inet filter {
 
         # --- Regole DNS specifiche per ruolo ---
         include "/etc/nftables.d/dns.nft"
+
+        # --- Regole anti-amplification UDP ---
+        include "/etc/nftables.d/anti-amplification.nft"
 
         # --- Porte extra (opzionale) ---
 {% for port in nft_extra_tcp_ports %}

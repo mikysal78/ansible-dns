@@ -34,16 +34,6 @@
     group: root
     mode: "0700"
 
-- name: Deploy ruleset nftables principale
-  ansible.builtin.template:
-    src: nftables.conf.j2
-    dest: /etc/nftables.conf
-    owner: root
-    group: root
-    mode: "0600"
-    validate: "nft -c -f %s"
-  notify: reload nftables
-
 - name: Deploy regole specifiche per ruolo DNS
   ansible.builtin.template:
     src: "nftables-dns-{{ 'primary' if 'dns_primary' in group_names else 'secondary' }}.nft.j2"
@@ -51,13 +41,21 @@
     owner: root
     group: root
     mode: "0600"
-    validate: "nft -c -f %s"
   notify: reload nftables
 
 - name: Deploy regole anti-amplification UDP
   ansible.builtin.template:
     src: nftables-anti-amplification.nft.j2
     dest: /etc/nftables.d/anti-amplification.nft
+    owner: root
+    group: root
+    mode: "0600"
+  notify: reload nftables
+
+- name: Deploy ruleset nftables principale
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
     owner: root
     group: root
     mode: "0600"

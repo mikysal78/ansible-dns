@@ -26,6 +26,9 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Fix: deploy chiavi TSIG/DDNS prima dei conf BIND (validate include falliva)
 - Fix: filtro ljust inesistente sostituito con format in zone.db.j2 e playbook
 - Fix: placeholder hex non validi (TLSA/SSHFP) in example.com.yml sostituiti con hex validi
+- Fix: deploy frammenti nft prima del ruleset principale (validate include)
+- Fix: set nftables con join invece di loop malformati (sintassi nft valida)
+- Fix: include anti-amplification mancante + regole reali nel frammento
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

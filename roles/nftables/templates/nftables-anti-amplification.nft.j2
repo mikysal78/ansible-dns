@@ -2,14 +2,16 @@
 # Generato da Ansible — NON MODIFICARE MANUALMENTE
 #
 # Incluso dalla chain input di inet filter.
-# Regole aggiuntive OUTPUT sono in tabella dedicata nel file principale.
+# Mitiga gli attacchi di amplification DNS limitando le query
+# ad alto rischio e applicando rate limiting per sorgente.
 
-        # Blocca query DNS di tipo ANY (qtype 255) — principale vettore amplification
-        # Il payload UDP DNS: byte 2-3 = flags, byte 4-5 = qdcount
-        # qtype è negli ultimi 2 byte della question section
-        # Approccio pragmatico: blocca pacchetti UDP/53 con dimensione
-        # tipica delle query ANY (piccole richieste → risposte enormi)
-        # BIND ha già "minimal-responses" ma nft aggiunge un layer esterno
+        # Blocca query DNS di tipo ANY (qtype 255), principale vettore di
+        # amplification. Il qtype ANY è al byte offset 2 della sezione question
+        # (dopo l'header DNS di 12 byte): si verifica @th,offset.
+        # Drop di pacchetti UDP/53 che richiedono ANY.
+        udp dport 53 @th,240,16 255 drop
 
-        # Rate limit globale sulle risposte UDP grandi in OUTPUT
-        # (gestito nella tabella output del conf principale)
+        # Rate limit per IP sorgente sulle query UDP/53 (anti-flood).
+        udp dport 53 ip saddr != @dns_secondaries \
+            meter amp_flood { ip saddr limit rate over {{ nft_dns_rate_limit_pps | default(30) }}/second burst {{ nft_dns_rate_limit_burst | default(50) }} packets } \
+            drop

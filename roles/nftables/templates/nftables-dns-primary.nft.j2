@@ -18,20 +18,8 @@
 
         # DDNS nsupdate: accetta da localhost (acme.sh) e router OpenWrt
         # I router si autenticano via TSIG, il firewall lascia passare per IP
-        udp dport 53 ip saddr {
-{% for ip in ddns_allowed_sources | default([]) %}
-            {{ ip }}{% if not loop.last %},{% endif %}
-
-{% endfor %}
-            127.0.0.1
-        } accept
-        tcp dport 53 ip saddr {
-{% for ip in ddns_allowed_sources | default([]) %}
-            {{ ip }}{% if not loop.last %},{% endif %}
-
-{% endfor %}
-            127.0.0.1
-        } accept
+        udp dport 53 ip saddr { {{ (['127.0.0.1'] + (ddns_allowed_sources | default([]))) | join(', ') }} } accept
+        tcp dport 53 ip saddr { {{ (['127.0.0.1'] + (ddns_allowed_sources | default([]))) | join(', ') }} } accept
 
         # Tutto il resto su porta 53 viene droppato silenziosamente
         udp dport 53 drop
