@@ -104,12 +104,12 @@
         that: slave_check.rc == 0
         fail_msg: "Il secondary non ha zone di tipo slave"
 
-    - name: Verifica che il secondary non accetti DDNS
+    - name: Verifica che il secondary non accetti trasferimenti in uscita
       ansible.builtin.command:
-        cmd: grep -q "allow-update.*none" /etc/bind/named.conf.local
+        cmd: grep -q "allow-transfer.*none" /etc/bind/named.conf.local
       changed_when: false
       register: ddns_block
-    - name: Assert DDNS bloccato sul secondary
+    - name: Assert transfer in uscita bloccato sul secondary
       ansible.builtin.assert:
         that: ddns_block.rc == 0
-        fail_msg: "Il secondary non blocca gli aggiornamenti dinamici"
+        fail_msg: "Il secondary non blocca i trasferimenti di zona in uscita"

@@ -14,7 +14,6 @@ zone "{{ zone.name }}" {
     };
     allow-notify { {{ dns_primary_ip }}; };
     allow-transfer { none; };
-    allow-update { none; };
 };
 
 {% endfor %}
