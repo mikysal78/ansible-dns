@@ -33,6 +33,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Fix: test_sequence molecule idempotency -> idempotence (nome corretto)
 - Fix: rimosso timestamp volatile da zone.db.j2 per garantire idempotenza
 - Fix: verify.yml usa named.service (nome reale su Trixie) + scope corretto
+- Fix: allow-update none esplicito nelle zone slave del secondary (sicurezza + verify)
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)
