@@ -25,6 +25,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Fix: check versione BIND in packages reso condizionale (named non ancora installato)
 - Fix: deploy chiavi TSIG/DDNS prima dei conf BIND (validate include falliva)
 - Fix: filtro ljust inesistente sostituito con format in zone.db.j2 e playbook
+- Fix: placeholder hex non validi (TLSA/SSHFP) in example.com.yml sostituiti con hex validi
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

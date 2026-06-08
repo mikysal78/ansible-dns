@@ -110,14 +110,17 @@ zone:
       usage: 3
       selector: 1
       matching: 1
-      certificate_hash: "HASH_SHA256_DEL_CERTIFICATO"
+      # Hash SHA-256 di esempio (64 hex). Sostituisci con quello del tuo certificato:
+      # openssl x509 -in cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256
+      certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
 
   # --- SSHFP ---
   sshfp:
     - name: "mail"
       algorithm: 4       # ED25519
       type: 2            # SHA-256
-      fingerprint: "FINGERPRINT_HEX"
+      # Fingerprint SHA-256 di esempio (64 hex). Ricava il vero con: ssh-keygen -r mail
+      fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
 
   # --- NAPTR ---
   naptr: []
