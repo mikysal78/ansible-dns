@@ -24,6 +24,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - molecule/default/requirements.yml per dependency Galaxy
 - Fix: check versione BIND in packages reso condizionale (named non ancora installato)
 - Fix: deploy chiavi TSIG/DDNS prima dei conf BIND (validate include falliva)
+- Fix: filtro ljust inesistente sostituito con format in zone.db.j2 e playbook
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

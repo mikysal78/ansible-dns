@@ -23,17 +23,17 @@ $TTL    {{ zone_data.zone.ttl | default(3600) }}
 
 ; --- A ---
 {% for r in zone_data.zone.a | default([]) %}
-{{ r.name | ljust(30) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  A       {{ r.ip }}
+{{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  A       {{ r.ip }}
 {% endfor %}
 
 ; --- AAAA ---
 {% for r in zone_data.zone.aaaa | default([]) %}
-{{ r.name | ljust(30) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  AAAA    {{ r.ip }}
+{{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  AAAA    {{ r.ip }}
 {% endfor %}
 
 ; --- CNAME ---
 {% for r in zone_data.zone.cname | default([]) %}
-{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  CNAME   {{ r.target }}
+{{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  CNAME   {{ r.target }}
 {% endfor %}
 
 ; --- MX ---
@@ -43,30 +43,30 @@ $TTL    {{ zone_data.zone.ttl | default(3600) }}
 
 ; --- TXT ---
 {% for r in zone_data.zone.txt | default([]) %}
-{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  TXT     "{{ r.value }}"
+{{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  TXT     "{{ r.value }}"
 {% endfor %}
 
 ; --- SRV ---
 {% for r in zone_data.zone.srv | default([]) %}
-{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  SRV     {{ r.priority }} {{ r.weight }} {{ r.port }} {{ r.target }}
+{{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  SRV     {{ r.priority }} {{ r.weight }} {{ r.port }} {{ r.target }}
 {% endfor %}
 
 ; --- CAA ---
 {% for r in zone_data.zone.caa | default([]) %}
-{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  CAA     {{ r.flag }} {{ r.tag }} "{{ r.value }}"
+{{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  CAA     {{ r.flag }} {{ r.tag }} "{{ r.value }}"
 {% endfor %}
 
 ; --- TLSA ---
 {% for r in zone_data.zone.tlsa | default([]) %}
-{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  TLSA    {{ r.usage }} {{ r.selector }} {{ r.matching }} {{ r.certificate_hash }}
+{{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  TLSA    {{ r.usage }} {{ r.selector }} {{ r.matching }} {{ r.certificate_hash }}
 {% endfor %}
 
 ; --- SSHFP ---
 {% for r in zone_data.zone.sshfp | default([]) %}
-{{ r.name | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  SSHFP   {{ r.algorithm }} {{ r.type }} {{ r.fingerprint }}
+{{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  SSHFP   {{ r.algorithm }} {{ r.type }} {{ r.fingerprint }}
 {% endfor %}
 
 ; --- PTR (zone reverse) ---
 {% for r in zone_data.zone.ptr | default([]) %}
-{{ r.last_octet | ljust(30) }} {{ zone_data.zone.ttl | default(3600) }} IN  PTR     {{ r.fqdn }}
+{{ '%-30s' | format(r.last_octet) }} {{ zone_data.zone.ttl | default(3600) }} IN  PTR     {{ r.fqdn }}
 {% endfor %}

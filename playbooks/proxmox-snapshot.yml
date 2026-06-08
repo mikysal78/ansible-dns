@@ -49,7 +49,7 @@
         msg: |
           Snapshot VM {{ proxmox_primary_name }} (VMID {{ proxmox_primary_vmid }}):
           {% for snap in snapshots_list.json.data | default([]) %}
-          - {{ snap.name | ljust(30) }} {{ snap.description | default('') }}
+          - {{ '%-30s' | format(snap.name) }} {{ snap.description | default('') }}
             Creato: {{ snap.snaptime | default('N/A') }}
           {% endfor %}
       when: snap_action == "list"

@@ -198,5 +198,5 @@
         msg: |
           Zone aggiornate : {{ zones_changed | default([]) | join(', ') or 'nessuna' }}
           {% for z in zones_changed | default([]) %}
-          ✓ {{ z | ljust(30) }} serial {{ zone_serial_map[z] }} → {{ zone_new_serial_map[z] }}
+          ✓ {{ '%-30s' | format(z) }} serial {{ zone_serial_map[z] }} → {{ zone_new_serial_map[z] }}
           {% endfor %}
