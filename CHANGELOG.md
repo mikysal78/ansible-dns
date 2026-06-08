@@ -29,6 +29,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Fix: deploy frammenti nft prima del ruleset principale (validate include)
 - Fix: set nftables con join invece di loop malformati (sintassi nft valida)
 - Fix: include anti-amplification mancante + regole reali nel frammento
+- Fix: include TSIG key in named.conf.local del secondary (validate isolata)
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)

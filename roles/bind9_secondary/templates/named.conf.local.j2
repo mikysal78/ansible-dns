@@ -1,6 +1,10 @@
 // named.conf.local — SECONDARY
 // Generato da Ansible — NON MODIFICARE MANUALMENTE
 
+// La chiave TSIG axfr serve per autenticare l'AXFR verso il primary.
+// Inclusa qui perché è referenziata nel blocco masters sottostante.
+include "{{ bind_config_dir }}/tsig-axfr.key";
+
 {% for zone in dns_zones %}
 zone "{{ zone.name }}" {
     type slave;
