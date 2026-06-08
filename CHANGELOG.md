@@ -30,6 +30,8 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Fix: set nftables con join invece di loop malformati (sintassi nft valida)
 - Fix: include anti-amplification mancante + regole reali nel frammento
 - Fix: include TSIG key in named.conf.local del secondary (validate isolata)
+- Fix: test_sequence molecule idempotency -> idempotence (nome corretto)
+- Fix: rimosso timestamp volatile da zone.db.j2 per garantire idempotenza
 
 ### Corretto
 - Bug precedenza operatori nel calcolo serial SOA (update-zones.yml)
