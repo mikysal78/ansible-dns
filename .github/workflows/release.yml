@@ -37,15 +37,18 @@ jobs:
 
       - name: Crea archivio release
         run: |
-          tar czf ansible-dns-${{ github.ref_name }}.tar.gz \
-            --exclude='.git' \
-            --exclude='molecule' \
-            --exclude='.github' \
+          tar czf /tmp/ansible-dns-${{ github.ref_name }}.tar.gz \
+            --exclude='./.git' \
+            --exclude='./molecule' \
+            --exclude='./.github' \
             --exclude='*.vault' \
-            .
+            --transform 's,^\.,ansible-dns,' \
+            . || true
+          mv /tmp/ansible-dns-${{ github.ref_name }}.tar.gz .
+          ls -la ansible-dns-${{ github.ref_name }}.tar.gz
 
       - name: Crea GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: "Release ${{ github.ref_name }}"
           body: |

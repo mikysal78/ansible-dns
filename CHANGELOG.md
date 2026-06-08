@@ -6,7 +6,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
-## [Unreleased]
+## [1.1.0] — 2026-06-08
 
 ### Aggiunto
 - Role `proxmox_vm` — provisioning VM primary su Proxmox VE via API + cloud-init
@@ -47,7 +47,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Config ansible-lint e yamllint allineate al profilo production
 
 
-## [1.0.0] — 2024-XX-XX
+## [1.0.0] — 2026-06-07
 
 ### Aggiunto
 - Role `bind9_primary` — hidden master BIND 9.20 con zone YAML
