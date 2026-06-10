@@ -6,6 +6,25 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.3.0] — 2026-06-10
+
+### Aggiunto
+- Record A con `ip` multiplo (lista): genera A multipli sullo stesso nome (round-robin / multi-homing)
+- Campo `ipv6` accetta anche lista di indirizzi
+- Campo `aliases` sui record A: genera automaticamente CNAME verso il nome canonico
+- Avviso in fase di deploy se un host mescola IP pubblici e privati sotto lo stesso nome (rischio irraggiungibilità da fuori rete)
+- Template `mixed_ip_warnings.j2` per il rilevamento IP misti
+
+## [1.2.0] — 2026-06-09
+
+### Aggiunto
+- Supporto IPv6 inline: campo `ipv6` sui record A genera automaticamente il record AAAA
+- Zone reverse (PTR) generate automaticamente dai record A/AAAA, IPv4 e IPv6
+- Variabile `dns_reverse_zones` in notazione CIDR (es. 203.0.113.0/24, 10.27.0.0/16, 2001:db8::/64)
+- IPv4 reverse /8 /16 /24; IPv6 prefisso multiplo di 4. zone_name calcolato dal CIDR
+- Template reverse_meta.j2, reverse_ptr_collect.j2, zone.reverse.db.j2 (puro Jinja2)
+- Deduplicazione PTR: un solo PTR per IP
+
 ## [1.1.0] — 2026-06-08
 
 ### Aggiunto

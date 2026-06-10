@@ -23,26 +23,35 @@ zone:
     - "ns2.example.com."
 
   # --- Record A / AAAA ---
+  # ip e ipv6 possono essere scalari o liste. ipv6 inline genera AAAA.
+  # aliases genera CNAME verso il nome del record.
   a:
     - name: "@"
       ip: "203.0.113.10"
+      ipv6: "2001:db8::1"
       ttl: 3600
     - name: "www"
       ip: "203.0.113.10"
+      ipv6: "2001:db8::1"
+      aliases:
+        - "web"
     - name: "mail"
       ip: "203.0.113.10"
+      ipv6: "2001:db8::2"
     - name: "ns1"
       ip: "203.0.113.10"
     - name: "ns2"
       ip: "203.0.113.20"
     - name: "vpn"
       ip: "203.0.113.50"
+    # Esempio multi-IP pubblico (round-robin) — IP omogenei, tutti pubblici
+    - name: "lb"
+      ip:
+        - "203.0.113.60"
+        - "203.0.113.61"
 
-  aaaa:
-    - name: "@"
-      ip: "2001:db8::1"
-    - name: "www"
-      ip: "2001:db8::1"
+  # Lista AAAA dedicata: per record solo-IPv6 (retrocompatibile)
+  aaaa: []
 
   # --- CNAME ---
   cname:

@@ -1,0 +1,24 @@
+; ============================================================
+; Zona REVERSE: {{ rev.zone_name }}
+; Generata automaticamente da Ansible dai record A/AAAA delle zone dirette
+; NON MODIFICARE MANUALMENTE
+; ============================================================
+
+$TTL    {{ rev.ttl | default(3600) }}
+@   IN  SOA {{ rev.primary_ns }} {{ rev.admin }} (
+                {{ zone_serial_override | default(ansible_date_time.date | replace("-","") ~ "01") }} ; serial
+                7200       ; refresh
+                3600       ; retry
+                1209600    ; expire
+                300        ; minimum
+            )
+
+; --- NS ---
+{% for ns in rev.ns %}
+@   IN  NS  {{ ns }}
+{% endfor %}
+
+; --- PTR ---
+{% for ptr in rev_ptr_records %}
+{{ '%-24s' | format(ptr.label) }} IN  PTR  {{ ptr.fqdn }}
+{% endfor %}

@@ -1,0 +1,86 @@
+{#
+  Raccoglie i PTR per la rete reverse corrente (rev.cidr). Puro Jinja2.
+  Gestisce ip/ipv6 sia come scalare che come lista.
+  IPv4: /8 /16 /24.  IPv6: prefisso multiplo di 4. Deduplica per label.
+#}
+{% set cidr = rev.cidr %}
+{% set is_ipv6 = ':' in cidr %}
+{% set netaddr = cidr.split('/')[0] %}
+{% set prefix = cidr.split('/')[1] | int %}
+{% set ptrs = [] %}
+{% for z in dns_zones %}
+{%   set zdata = lookup('file', dns_zones_dir_src + '/' + z.file) | from_yaml %}
+{%   set zone_origin = zdata.zone.name %}
+{%   if not is_ipv6 %}
+{%     set net_octets = (prefix / 8) | int %}
+{%     set net_prefix_str = netaddr.split('.')[:net_octets] | join('.') %}
+{%     for r in zdata.zone.a | default([]) %}
+{%       set ips = r.ip if (r.ip is iterable and r.ip is not string) else [r.ip] %}
+{%       for addr in ips %}
+{%         set ip_octets = addr.split('.') %}
+{%         if (ip_octets[:net_octets] | join('.')) == net_prefix_str %}
+{%           set label = ip_octets[net_octets:] | reverse | join('.') %}
+{%           set host = r.name %}
+{%           set fqdn = (zone_origin ~ '.') if host == '@' else (host ~ '.' ~ zone_origin ~ '.') %}
+{%           set _ = ptrs.append({'label': label, 'fqdn': fqdn}) %}
+{%         endif %}
+{%       endfor %}
+{%     endfor %}
+{%   else %}
+{%     set v6list = [] %}
+{%     for r in zdata.zone.a | default([]) %}
+{%       if r.ipv6 is defined %}
+{%         set v6s = r.ipv6 if (r.ipv6 is iterable and r.ipv6 is not string) else [r.ipv6] %}
+{%         for a6 in v6s %}{% set _ = v6list.append({'name': r.name, 'ip': a6}) %}{% endfor %}
+{%       endif %}
+{%     endfor %}
+{%     for r in zdata.zone.aaaa | default([]) %}
+{%       set _ = v6list.append({'name': r.name, 'ip': r.ip}) %}
+{%     endfor %}
+{%     set nhalves = netaddr.split('::') %}
+{%     if nhalves | length == 1 %}
+{%       set nleft = netaddr.split(':') %}{% set nright = [] %}
+{%     else %}
+{%       set nleft = nhalves[0].split(':') if nhalves[0] != '' else [] %}
+{%       set nright = nhalves[1].split(':') if nhalves[1] != '' else [] %}
+{%     endif %}
+{%     set nmissing = 8 - (nleft | length) - (nright | length) %}
+{%     set ngroups = [] %}
+{%     for g in nleft %}{% set _ = ngroups.append('%04x' | format(g | int(base=16))) %}{% endfor %}
+{%     for i in range(nmissing) %}{% set _ = ngroups.append('0000') %}{% endfor %}
+{%     for g in nright %}{% set _ = ngroups.append('%04x' | format(g | int(base=16))) %}{% endfor %}
+{%     set net_nibbles_all = [] %}
+{%     for g in ngroups %}{% for ch in g %}{% set _ = net_nibbles_all.append(ch) %}{% endfor %}{% endfor %}
+{%     set net_nibbles = (prefix / 4) | int %}
+{%     set net_prefix_nib = net_nibbles_all[:net_nibbles] | join('') %}
+{%     for r in v6list %}
+{%       set halves = r.ip.split('::') %}
+{%       if halves | length == 1 %}
+{%         set left = r.ip.split(':') %}{% set right = [] %}
+{%       else %}
+{%         set left = halves[0].split(':') if halves[0] != '' else [] %}
+{%         set right = halves[1].split(':') if halves[1] != '' else [] %}
+{%       endif %}
+{%       set missing = 8 - (left | length) - (right | length) %}
+{%       set groups = [] %}
+{%       for g in left %}{% set _ = groups.append('%04x' | format(g | int(base=16))) %}{% endfor %}
+{%       for i in range(missing) %}{% set _ = groups.append('0000') %}{% endfor %}
+{%       for g in right %}{% set _ = groups.append('%04x' | format(g | int(base=16))) %}{% endfor %}
+{%       set nibbles = [] %}
+{%       for g in groups %}{% for ch in g %}{% set _ = nibbles.append(ch) %}{% endfor %}{% endfor %}
+{%       if (nibbles[:net_nibbles] | join('')) == net_prefix_nib %}
+{%         set label = nibbles[net_nibbles:] | reverse | join('.') %}
+{%         set host = r.name %}
+{%         set fqdn = (zone_origin ~ '.') if host == '@' else (host ~ '.' ~ zone_origin ~ '.') %}
+{%         set _ = ptrs.append({'label': label, 'fqdn': fqdn}) %}
+{%       endif %}
+{%     endfor %}
+{%   endif %}
+{% endfor %}
+{% for p in ptrs %}
+{% if p.label not in (ptrs[:loop.index0] | map(attribute='label') | list) %}
+- label: "{{ p.label }}"
+  fqdn: "{{ p.fqdn }}"
+{% endif %}
+{% endfor %}
+{% if ptrs | length == 0 %}[]{% endif %}

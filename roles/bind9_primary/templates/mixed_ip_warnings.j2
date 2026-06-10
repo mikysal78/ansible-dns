@@ -1,0 +1,29 @@
+{#
+  Rileva host con record A che mescolano IP pubblici e privati sotto lo
+  stesso nome. Emette YAML: lista di stringhe "zona/host: ip1, ip2".
+  Privati = RFC1918 (10/8, 172.16/12, 192.168/16) + CGNAT 100.64/10.
+#}
+{% set warnings = [] %}
+{% for z in dns_zones %}
+{%   set zdata = lookup('file', dns_zones_dir_src + '/' + z.file) | from_yaml %}
+{%   for r in zdata.zone.a | default([]) %}
+{%     set ips = r.ip if (r.ip is iterable and r.ip is not string) else [r.ip] %}
+{%     set ns = namespace(has_priv=false, has_pub=false) %}
+{%     for addr in ips %}
+{%       set o = addr.split('.') %}
+{%       set o0 = o[0] | int %}{% set o1 = o[1] | int %}
+{%       if o0 == 10 or (o0 == 172 and 16 <= o1 <= 31) or (o0 == 192 and o1 == 168) or (o0 == 100 and 64 <= o1 <= 127) %}
+{%         set ns.has_priv = true %}
+{%       else %}
+{%         set ns.has_pub = true %}
+{%       endif %}
+{%     endfor %}
+{%     if ns.has_priv and ns.has_pub %}
+{%       set _ = warnings.append(z.name ~ '/' ~ r.name ~ ': ' ~ (ips | join(', '))) %}
+{%     endif %}
+{%   endfor %}
+{% endfor %}
+{% for w in warnings %}
+- "{{ w }}"
+{% endfor %}
+{% if warnings | length == 0 %}[]{% endif %}

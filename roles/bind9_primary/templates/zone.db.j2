@@ -21,16 +21,35 @@ $TTL    {{ zone_data.zone.ttl | default(3600) }}
 {% endfor %}
 
 ; --- A ---
+{# Supporta ip come scalare o lista (round-robin / multi-homing) #}
 {% for r in zone_data.zone.a | default([]) %}
-{{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  A       {{ r.ip }}
+{% set ips = r.ip if (r.ip is iterable and r.ip is not string) else [r.ip] %}
+{% for addr in ips %}
+{{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  A       {{ addr }}
+{% endfor %}
 {% endfor %}
 
 ; --- AAAA ---
+{# AAAA da campo ipv6 (scalare o lista) sui record A #}
+{% for r in zone_data.zone.a | default([]) %}
+{% if r.ipv6 is defined %}
+{% set v6s = r.ipv6 if (r.ipv6 is iterable and r.ipv6 is not string) else [r.ipv6] %}
+{% for addr in v6s %}
+{{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  AAAA    {{ addr }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{# AAAA da lista dedicata (retrocompatibilità) #}
 {% for r in zone_data.zone.aaaa | default([]) %}
 {{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  AAAA    {{ r.ip }}
 {% endfor %}
 
-; --- CNAME ---
+; --- CNAME (da record cname dedicati + aliases sui record A) ---
+{% for r in zone_data.zone.a | default([]) %}
+{% for alias in r.aliases | default([]) %}
+{{ '%-30s' | format(alias) }} {{ zone_data.zone.ttl | default(3600) }} IN  CNAME   {{ r.name }}
+{% endfor %}
+{% endfor %}
 {% for r in zone_data.zone.cname | default([]) %}
 {{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  CNAME   {{ r.target }}
 {% endfor %}

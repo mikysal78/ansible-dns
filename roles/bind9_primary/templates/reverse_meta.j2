@@ -1,0 +1,36 @@
+{#
+  Calcola i metadati della zona reverse dal CIDR (variabile `rev.cidr`).
+  IPv4: /8 /16 /24 (multipli di 8).  IPv6: prefissi multipli di 4.
+#}
+{% set cidr = rev.cidr %}
+{% set is_ipv6 = ':' in cidr %}
+{% set addr = cidr.split('/')[0] %}
+{% set prefix = cidr.split('/')[1] | int %}
+{% if not is_ipv6 %}
+{%  set octets = addr.split('.') %}
+{%  set net_octets = (prefix / 8) | int %}
+{%  set zone_name = (octets[:net_octets] | reverse | join('.')) ~ '.in-addr.arpa' %}
+is_ipv6: false
+prefix: {{ prefix }}
+zone_name: "{{ zone_name }}"
+{% else %}
+{%  set halves = addr.split('::') %}
+{%  if halves | length == 1 %}
+{%    set left = addr.split(':') %}{% set right = [] %}
+{%  else %}
+{%    set left = halves[0].split(':') if halves[0] != '' else [] %}
+{%    set right = halves[1].split(':') if halves[1] != '' else [] %}
+{%  endif %}
+{%  set missing = 8 - (left | length) - (right | length) %}
+{%  set groups = [] %}
+{%  for g in left %}{% set _ = groups.append('%04x' | format(g | int(base=16))) %}{% endfor %}
+{%  for i in range(missing) %}{% set _ = groups.append('0000') %}{% endfor %}
+{%  for g in right %}{% set _ = groups.append('%04x' | format(g | int(base=16))) %}{% endfor %}
+{%  set nibbles = [] %}
+{%  for g in groups %}{% for ch in g %}{% set _ = nibbles.append(ch) %}{% endfor %}{% endfor %}
+{%  set net_nibbles = (prefix / 4) | int %}
+{%  set zone_name = (nibbles[:net_nibbles] | reverse | join('.')) ~ '.ip6.arpa' %}
+is_ipv6: true
+prefix: {{ prefix }}
+zone_name: "{{ zone_name }}"
+{% endif %}
