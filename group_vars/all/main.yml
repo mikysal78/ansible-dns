@@ -53,10 +53,26 @@ dns_zones:
     file: "zones/dyn.example.com.yml"
     type: "master"
     ddns_enabled: true
-  - name: "113.0.203.in-addr.arpa"
-    file: "zones/203.0.113.reverse.yml"
-    type: "master"
-    ddns_enabled: false
+
+# --- Zone REVERSE automatiche (notazione CIDR) ---
+# Dichiari solo il CIDR: zone_name e record PTR vengono calcolati e
+# raccolti automaticamente dai record A/AAAA delle zone dirette.
+# IPv4: supporta /8, /16, /24.  IPv6: prefisso multiplo di 4.
+dns_reverse_zones:
+  - cidr:       "203.0.113.0/24"
+    primary_ns: "ns1.example.com."
+    admin:      "hostmaster.example.com."
+    ttl:        3600
+    ns:
+      - "ns1.example.com."
+      - "ns2.example.com."
+  - cidr:       "2001:db8::/64"
+    primary_ns: "ns1.example.com."
+    admin:      "hostmaster.example.com."
+    ttl:        3600
+    ns:
+      - "ns1.example.com."
+      - "ns2.example.com."
 
 # --- Bind9 ---
 bind_user: "bind"

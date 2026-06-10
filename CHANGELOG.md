@@ -6,6 +6,16 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.2.0] — 2026-06-09
+
+### Aggiunto
+- Supporto IPv6 inline: campo `ipv6` sui record A genera automaticamente il record AAAA corrispondente
+- Zone reverse (PTR) generate automaticamente dai record A/AAAA delle zone dirette, IPv4 e IPv6
+- Variabile `dns_reverse_zones` in notazione CIDR (es. `203.0.113.0/24`, `10.27.0.0/16`, `2001:db8::/64`)
+- IPv4 reverse supporta /8, /16, /24; IPv6 prefisso multiplo di 4. zone_name calcolato dal CIDR
+- Template `reverse_meta.j2`, `reverse_ptr_collect.j2`, `zone.reverse.db.j2` (puro Jinja2, nessuna dipendenza)
+- Deduplicazione automatica: un solo PTR per IP
+
 ## [1.1.0] — 2026-06-08
 
 ### Aggiunto

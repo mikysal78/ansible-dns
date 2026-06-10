@@ -24,3 +24,20 @@ zone "{{ zone.name }}" {
 };
 
 {% endfor %}
+
+{% for rev in reverse_zones_computed | default([]) %}
+zone "{{ rev.zone_name }}" {
+    type master;
+    file "{{ bind_zones_dir }}/db.{{ rev.zone_name }}";
+
+    allow-transfer { key "{{ dns_tsig_key_name }}"; };
+    notify yes;
+    also-notify {
+{% for ip in dns_secondary_ips %}
+        {{ ip }};
+{% endfor %}
+    };
+    allow-update { none; };
+};
+
+{% endfor %}

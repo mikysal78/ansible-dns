@@ -23,14 +23,18 @@ zone:
     - "ns2.example.com."
 
   # --- Record A / AAAA ---
+  # Puoi specificare ipv6 direttamente sul record A: genera A + AAAA insieme.
   a:
     - name: "@"
       ip: "203.0.113.10"
+      ipv6: "2001:db8::1"
       ttl: 3600
     - name: "www"
       ip: "203.0.113.10"
+      ipv6: "2001:db8::1"
     - name: "mail"
       ip: "203.0.113.10"
+      ipv6: "2001:db8::2"
     - name: "ns1"
       ip: "203.0.113.10"
     - name: "ns2"
@@ -38,11 +42,8 @@ zone:
     - name: "vpn"
       ip: "203.0.113.50"
 
-  aaaa:
-    - name: "@"
-      ip: "2001:db8::1"
-    - name: "www"
-      ip: "2001:db8::1"
+  # Lista AAAA dedicata: ancora supportata per record solo-IPv6 (retrocompatibile)
+  aaaa: []
 
   # --- CNAME ---
   cname:

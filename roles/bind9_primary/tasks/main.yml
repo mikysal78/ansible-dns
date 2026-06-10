@@ -81,6 +81,39 @@
   loop: "{{ dns_zones }}"
   changed_when: false
 
+# ============================================================
+# ZONE REVERSE AUTOMATICHE (da CIDR)
+# ============================================================
+
+- name: Calcola metadati zone reverse dal CIDR
+  ansible.builtin.set_fact:
+    reverse_zones_computed: "{{ reverse_zones_computed | default([]) + [rev | combine(lookup('template', 'reverse_meta.j2') | from_yaml)] }}"
+  loop: "{{ dns_reverse_zones | default([]) }}"
+  loop_control:
+    loop_var: rev
+
+- name: Genera zone reverse da YAML per ogni rete
+  ansible.builtin.template:
+    src: zone.reverse.db.j2
+    dest: "{{ bind_zones_dir }}/db.{{ rev.zone_name }}"
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0644"
+  loop: "{{ reverse_zones_computed | default([]) }}"
+  loop_control:
+    loop_var: rev
+  vars:
+    rev_ptr_records: "{{ lookup('template', 'reverse_ptr_collect.j2') | from_yaml }}"
+  notify: reload bind9
+
+- name: Verifica sintassi zone reverse
+  ansible.builtin.command:
+    cmd: "named-checkzone {{ rev.zone_name }} {{ bind_zones_dir }}/db.{{ rev.zone_name }}"
+  loop: "{{ reverse_zones_computed | default([]) }}"
+  loop_control:
+    loop_var: rev
+  changed_when: false
+
 - name: Assicura che bind9 sia abilitato e avviato
   ansible.builtin.systemd:
     name: bind9

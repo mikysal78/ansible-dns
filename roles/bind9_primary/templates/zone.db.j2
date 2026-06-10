@@ -26,6 +26,13 @@ $TTL    {{ zone_data.zone.ttl | default(3600) }}
 {% endfor %}
 
 ; --- AAAA ---
+{# AAAA da campo ipv6 combinato sui record A #}
+{% for r in zone_data.zone.a | default([]) %}
+{% if r.ipv6 is defined %}
+{{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  AAAA    {{ r.ipv6 }}
+{% endif %}
+{% endfor %}
+{# AAAA da lista dedicata (retrocompatibilità) #}
 {% for r in zone_data.zone.aaaa | default([]) %}
 {{ '%-30s' | format(r.name) }} {% if r.ttl is defined %}{{ r.ttl }}{% else %}{{ zone_data.zone.ttl | default(3600) }}{% endif %} IN  AAAA    {{ r.ip }}
 {% endfor %}
