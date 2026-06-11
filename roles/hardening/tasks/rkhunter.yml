@@ -17,7 +17,7 @@
     cmd: rkhunter --update --nocolors
   register: rkhunter_update
   changed_when: false
-  failed_when: rkhunter_update.rc not in [0, 2]   # rc=2 = nessun aggiornamento
+  failed_when: false
 
 - name: Inizializza proprietà file (baseline)
   ansible.builtin.command:

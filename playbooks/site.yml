@@ -13,7 +13,7 @@
     - role: nftables        # firewall (primary: solo secondari e localhost)
     - role: bind9_primary   # BIND9 hidden master + zone files
     - role: dnssec          # inline signing DNSSEC
-    - role: acme_dns        # certificati wildcard via DNS-01
+#    - role: acme_dns        # certificati wildcard via DNS-01
 
 - name: Deploy DNS Secondari (pubblici)
   hosts: dns_secondary

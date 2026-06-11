@@ -17,6 +17,13 @@
     group: "{{ bind_group }}"
     mode: "0755"
 
+- name: Aggiungi l'utente BIND al gruppo adm (accesso a /var/log)
+  ansible.builtin.user:
+    name: "{{ bind_user }}"
+    groups: adm
+    append: true
+  notify: restart bind9
+
 - name: Crea directory log
   ansible.builtin.file:
     path: "{{ bind_log_dir }}"

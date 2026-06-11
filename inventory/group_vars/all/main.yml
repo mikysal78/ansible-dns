@@ -65,6 +65,9 @@ dns_reverse_zones:
       - "ns1.ninux-nnxx.it."
       - "ns2.ninux-nnxx.it."
 
+acme_domains:
+  - domain: "ninux-nnxx.it"
+    keylength: "ec-256"
 
 # --- Bind9 ---
 bind_user: "bind"

@@ -31,21 +31,30 @@
     group: root
     mode: "0755"
 
+- name: Crea directory sorgente acme.sh
+  ansible.builtin.file:
+    path: "{{ acme_install_dir }}/src"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Scarica acme.sh
   ansible.builtin.get_url:
     url: "https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh"
-    dest: "/tmp/acme_install.sh"
+    dest: "{{ acme_install_dir }}/src/acme.sh"
     mode: "0755"
 
 - name: Installa acme.sh
   ansible.builtin.command:
     cmd: >
-      /tmp/acme_install.sh --install
+      ./acme.sh --install
       --home {{ acme_install_dir }}
       --config-home {{ acme_install_dir }}/config
       --cert-home {{ acme_certs_dir }}
       --accountemail {{ acme_email }}
       --no-cron
+    chdir: "{{ acme_install_dir }}/src"
     creates: "{{ acme_install_dir }}/acme.sh"
 
 - name: Registra account ACME
@@ -87,10 +96,10 @@
       --server {{ acme_server }}
       --dnssleep 10
       --keylength {{ item.keylength | default('ec-256') }}
-    environment:
-      NSUPDATE_SERVER: "{{ dns_primary_ip }}"
-      NSUPDATE_KEY: "{{ acme_install_dir }}/nsupdate.key"
     creates: "{{ acme_certs_dir }}/{{ item.domain }}_ecc/{{ item.domain }}.cer"
+  environment:
+    NSUPDATE_SERVER: "{{ dns_primary_ip }}"
+    NSUPDATE_KEY: "{{ acme_install_dir }}/nsupdate.key"
   loop: "{{ acme_domains }}"
 
 - name: Installa certificati nelle directory finali
