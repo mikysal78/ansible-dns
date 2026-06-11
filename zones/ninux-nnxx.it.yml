@@ -1,0 +1,142 @@
+---
+# ============================================================
+# ZONA: ninux-nnxx.it
+# Formato YAML — viene renderizzato via template Jinja2
+# ============================================================
+
+zone:
+  name: "ninux-nnxx.it"
+  ttl: 3600
+
+  soa:
+    primary_ns: "ns1.ninux-nnxx.it."
+    admin:      "hostmaster.ninux-nnxx.it."
+    serial:     "{{ '%Y%m%d01' | strftime }}"   # auto-data, aggiornato dal role
+    refresh:    7200
+    retry:      3600
+    expire:     1209600
+    minimum:    300
+
+  # --- Name Servers ---
+  ns:
+    - "ns1.ninux-nnxx.it."
+    - "ns2.ninux-nnxx.it."
+
+  # --- Record A / AAAA ---
+  # ip e ipv6 possono essere scalari o liste. ipv6 inline genera AAAA.
+  # aliases genera CNAME verso il nome del record.
+  a:
+    - name: "@"
+      ip: "95.32.70.193"
+      ipv6: "2a07:7e81:3f1c::6"
+      ttl: 3600
+    - name: "www"
+      ip: "95.32.70.193"
+      ipv6: "2a07:7e81:3f1c::6"
+      aliases:
+        - "ftp"
+        - "downloads"
+    - name: "mail"
+      ip: "95.32.70.193"
+      ipv6: "2a07:7e81:3f1c::6"
+      aliases:
+        - "autodiscover"
+        - "autoconfig"
+        - "smtp"
+        - "impap"
+        - "pop3"
+    - name: "ns1"
+      ip: "135.125.196.114"
+    - name: "ns2"
+      ip: "135.125.233.182"
+    - name: "openwisp"
+      ip: "203.0.113.50"
+      ipv6: "2a07:7e81:3f1c::15"
+      aliases:
+        - "controller"
+        - "vpn"
+    # Esempio multi-IP pubblico (round-robin) — IP omogenei, tutti pubblici
+    - name: "lb"
+      ip:
+        - "203.0.113.60"
+        - "203.0.113.61"
+
+  # Lista AAAA dedicata: per record solo-IPv6 (retrocompatibile)
+  aaaa: []
+
+  # --- CNAME ---
+  cname: []
+
+  # --- MX ---
+  mx:
+    - priority: 10
+      host: "mail.ninux-nnxx.it."
+
+  # --- TXT (SPF, DKIM, DMARC, verifica dominio, ecc.) ---
+  txt:
+    - name: "@"
+      value: "v=spf1 mx a ip4:95.32.70.193 ~all"
+    - name: "@"
+      value: "google-site-verification=XXXXXXXXXXXXXX"
+    - name: "_dmarc"
+      value: "v=DMARC1; p=quarantine; rua=mailto:dmarc@ninux-nnxx.it; ruf=mailto:dmarc@ninux-nnxx.it; pct=100"
+    - name: "mail._domainkey"
+      value: "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GN..."
+
+  # --- SRV ---
+  srv:
+    - name: "_sip._tcp"
+      priority: 10
+      weight: 20
+      port: 5060
+      target: "sip.ninux-nnxx.it."
+    - name: "_imaps._tcp"
+      priority: 10
+      weight: 10
+      port: 993
+      target: "mail.ninux-nnxx.it."
+    - name: "_submission._tcp"
+      priority: 10
+      weight: 10
+      port: 587
+      target: "mail.ninux-nnxx.it."
+
+  # --- CAA (Certification Authority Authorization) ---
+  caa:
+    - name: "@"
+      flag: 0
+      tag: "issue"
+      value: "letsencrypt.org"
+    - name: "@"
+      flag: 0
+      tag: "issuewild"
+      value: "letsencrypt.org"
+    - name: "@"
+      flag: 0
+      tag: "iodef"
+      value: "mailto:security@ninux-nnxx.it"
+
+  # --- TLSA (DANE) ---
+  tlsa:
+    - name: "_443._tcp.www"
+      usage: 3
+      selector: 1
+      matching: 1
+      # Hash SHA-256 di esempio (64 hex). Sostituisci con quello del tuo certificato:
+      # openssl x509 -in cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256
+      certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+
+  # --- SSHFP ---
+  sshfp:
+    - name: "mail"
+      algorithm: 4       # ED25519
+      type: 2            # SHA-256
+      # Fingerprint SHA-256 di esempio (64 hex). Ricava il vero con: ssh-keygen -r mail
+      fingerprint: "2fa246cc859dea8a80bb87ec8efe992738332e30eaca66cd7d905d2e53868f8e"
+
+  # --- NAPTR ---
+  naptr: []
+
+  # --- ACME challenge records (gestiti automaticamente da acme.sh) ---
+  # I record _acme-challenge.* vengono aggiunti/rimossi da acme.sh via DDNS
+  # Non inserire qui manualmente
