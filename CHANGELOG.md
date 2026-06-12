@@ -6,6 +6,35 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.4.0] — 2026-06-12
+
+### Aggiunto
+- Role `wireguard`: tunnel cifrato tra hidden primary (dietro NAT) e secondari pubblici
+- Topologia roaming peer: il primary si connette ai secondari con PersistentKeepalive
+- Trasferimenti di zona (AXFR) e NOTIFY viaggiano cifrati nel tunnel 10.99.0.0/24
+- Monitoring (Prometheus + Grafana + Alertmanager) agganciato a site.yml
+- Exporter (node, bind) raggiunti via tunnel WireGuard; dashboard DNS e sistema
+- nftables: porta WireGuard e traffico fidato dentro wg0
+- Inventory e group_vars di esempio (hosts.yml.example, main.yml.example)
+
+### Modificato
+- IP DNS (dns_primary_ip / dns_secondary_ips) spostati sugli indirizzi del tunnel
+- group_vars spostato accanto all'inventory per il corretto caricamento
+- Grafana aggiornato a 13.0.2 con metodo keyring moderno (signed-by)
+- SSH: accesso root su porta 2400 con PermitOpen per i tunnel di monitoring
+
+### Corretto
+- rkhunter: update del database non bloccante
+- dnssec-validation impostato su auto (era yes, richiedeva trust-anchor manuali)
+- BIND: utente bind aggiunto al gruppo adm per scrivere i log
+- cron aggiunto ai pacchetti base (mancante su VPS minimali)
+- audit rules: rimossa modalità immutable (-e 2) che bloccava augenrules
+- monitoring: rimossi software-properties-common e apt-key (deprecati su Trixie)
+- acme_dns disabilitato sul primary nascosto
+
+### Sicurezza
+- Rimozione dati reali dal repo pubblico; il vault non è mai stato committato
+
 ## [1.3.0] — 2026-06-10
 
 ### Aggiunto
