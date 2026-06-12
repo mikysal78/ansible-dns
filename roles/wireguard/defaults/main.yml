@@ -1,0 +1,10 @@
+---
+# ============================================================
+# DEFAULTS — wireguard
+# Tunnel cifrato tra hidden primary (dietro NAT) e secondari pubblici
+# ============================================================
+wg_interface: "wg0"
+wg_port: 51820
+wg_subnet: "10.99.0.0/24"
+wg_keepalive: 25
+wg_key_dir: "/etc/wireguard"

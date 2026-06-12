@@ -1,0 +1,70 @@
+---
+# ============================================================
+# TASKS — wireguard
+# Topologia: primary (dietro NAT) ↔ secondari (endpoint pubblici)
+# Il primary si connette ai secondari e tiene il tunnel con keepalive.
+# ============================================================
+
+- name: Installa wireguard
+  ansible.builtin.apt:
+    name:
+      - wireguard
+      - wireguard-tools
+    state: present
+
+- name: Crea directory chiavi WireGuard
+  ansible.builtin.file:
+    path: "{{ wg_key_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Genera chiave privata WireGuard (se non esiste)
+  ansible.builtin.shell:
+    cmd: "wg genkey > {{ wg_key_dir }}/privatekey && chmod 600 {{ wg_key_dir }}/privatekey"
+    creates: "{{ wg_key_dir }}/privatekey"
+
+- name: Deriva chiave pubblica
+  ansible.builtin.shell:
+    cmd: "wg pubkey < {{ wg_key_dir }}/privatekey > {{ wg_key_dir }}/publickey"
+    creates: "{{ wg_key_dir }}/publickey"
+
+- name: Leggi chiave privata
+  ansible.builtin.slurp:
+    src: "{{ wg_key_dir }}/privatekey"
+  register: wg_priv_raw
+
+- name: Leggi chiave pubblica
+  ansible.builtin.slurp:
+    src: "{{ wg_key_dir }}/publickey"
+  register: wg_pub_raw
+
+- name: Registra le chiavi come fact dell'host
+  ansible.builtin.set_fact:
+    wg_private_key: "{{ wg_priv_raw.content | b64decode | trim }}"
+    wg_public_key: "{{ wg_pub_raw.content | b64decode | trim }}"
+
+- name: Deploy configurazione WireGuard
+  ansible.builtin.template:
+    src: wg.conf.j2
+    dest: "{{ wg_key_dir }}/{{ wg_interface }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: restart wireguard
+
+- name: Abilita IP forwarding (solo sui secondari, fungono da endpoint)
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    sysctl_set: true
+  when: "'dns_secondary' in group_names"
+
+- name: Abilita e avvia wg-quick
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wg_interface }}"
+    enabled: true
+    state: started
+    daemon_reload: true

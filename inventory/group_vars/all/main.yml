@@ -8,7 +8,7 @@ dns_domain_base: "ninux-nnxx.it"          # dominio principale
 dns_admin_email: "hostmaster@ninux-nnxx.it"
 
 # --- IP hidden primary (usato dai secondari per AXFR) ---
-dns_primary_ip: "10.27.22.14"
+dns_primary_ip: "10.99.0.1"
 dns_primary_port: 53
 
 # --- IP pubblici dei secondari (lista) ---

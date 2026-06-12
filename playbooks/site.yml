@@ -4,22 +4,33 @@
 # Uso: ansible-playbook playbooks/site.yml --ask-vault-pass
 # ============================================================
 
+# ------------------------------------------------------------
+# WireGuard PRIMA di tutto: il tunnel deve esistere prima che
+# BIND tenti i transfer. Gira su TUTTI gli host DNS insieme,
+# perché il template peer ha bisogno delle chiavi pubbliche
+# di tutti gli host (via hostvars).
+# ------------------------------------------------------------
+- name: Setup tunnel WireGuard (primary + secondari)
+  hosts: dns_primary:dns_secondary
+  become: true
+  roles:
+    - role: packages        # garantisce pacchetti base prima del tunnel
+    - role: wireguard
+
 - name: Deploy DNS Primary (hidden master)
   hosts: dns_primary
   become: true
   roles:
-    - role: packages        # installa tutti i pacchetti necessari
     - role: hardening       # hardening OS (ssh, sysctl, fs, auditd, fail2ban...)
     - role: nftables        # firewall (primary: solo secondari e localhost)
     - role: bind9_primary   # BIND9 hidden master + zone files
     - role: dnssec          # inline signing DNSSEC
-#    - role: acme_dns        # certificati wildcard via DNS-01
+    # - role: acme_dns       # disabilitato: primary nascosto, non serve TLS pubblico
 
 - name: Deploy DNS Secondari (pubblici)
   hosts: dns_secondary
   become: true
   roles:
-    - role: packages
     - role: hardening
     - role: nftables        # firewall (secondari: pubblico con rate limiting)
     - role: bind9_secondary
