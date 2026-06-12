@@ -5,11 +5,11 @@
 # ============================================================
 
 # --- SSH ---
-hardening_ssh_port: 22
+hardening_ssh_port: 2400
 
 # Porta SSH alternativa opzionale (es. 2222). null = disabilitata.
 hardening_ssh_alt_port: ~
-hardening_ssh_permit_root: "no"
+hardening_ssh_permit_root: "yes"
 hardening_ssh_password_auth: "no"
 hardening_ssh_pubkey_auth: "yes"
 hardening_ssh_max_auth_tries: 3
@@ -17,7 +17,11 @@ hardening_ssh_max_sessions: 5
 hardening_ssh_login_grace_time: 30
 hardening_ssh_client_alive_interval: 300
 hardening_ssh_client_alive_count_max: 2
-hardening_ssh_allow_tcp_forwarding: "no"
+hardening_ssh_allow_tcp_forwarding: "yes"
+# Forwarding ristretto: solo Grafana (3000) e Prometheus (9090) via tunnel SSH
+hardening_ssh_permit_open:
+  - "127.0.0.1:3000"
+  - "127.0.0.1:9090"
 hardening_ssh_x11_forwarding: "no"
 hardening_ssh_print_motd: "no"        # gestito da pam_motd
 hardening_ssh_banner: "/etc/issue.net"

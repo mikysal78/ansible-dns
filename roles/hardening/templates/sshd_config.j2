@@ -29,6 +29,10 @@ TCPKeepAlive no
 
 # --- Forwarding e tunneling (disabilitati) ---
 AllowTcpForwarding {{ hardening_ssh_allow_tcp_forwarding }}
+{% if hardening_ssh_permit_open is defined %}
+PermitOpen {% for p in hardening_ssh_permit_open %}{{ p }} {% endfor %}
+
+{% endif %}
 AllowAgentForwarding no
 AllowStreamLocalForwarding no
 GatewayPorts no

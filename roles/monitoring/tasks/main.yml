@@ -8,10 +8,10 @@
     name:
       - adduser
       - libfontconfig1
+      - musl
       - wget
       - curl
       - apt-transport-https
-      - software-properties-common
     state: present
     update_cache: true
 

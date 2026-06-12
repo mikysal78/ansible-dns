@@ -4,8 +4,8 @@
 # ============================================================
 
 # --- Identità DNS ---
-dns_domain_base: "ninux-nnxx.it"          # dominio principale
-dns_admin_email: "hostmaster@ninux-nnxx.it"
+dns_domain_base: "example.com"          # dominio principale
+dns_admin_email: "hostmaster@example.com"
 
 # --- IP hidden primary (usato dai secondari per AXFR) ---
 dns_primary_ip: "10.99.0.1"
@@ -13,8 +13,8 @@ dns_primary_port: 53
 
 # --- IP pubblici dei secondari (lista) ---
 dns_secondary_ips:
-  - "135.125.196.114"
-  - "135.125.233.182"
+  - "203.0.113.10"
+  - "203.0.113.20"
 
 # --- TSIG key per trasferimenti sicuri ---
 # Genera con: tsig-keygen -a hmac-sha256 axfr-key
@@ -27,11 +27,11 @@ dns_tsig_secret: "{{ vault_tsig_secret }}"
 ddns_key_name: "ddns-key"
 ddns_algorithm: "hmac-sha256"
 ddns_secret: "{{ vault_ddns_secret }}"
-ddns_zone: "dyn.ninux-nnxx.it"
+ddns_zone: "dyn.example.com"
 ddns_ttl: 60
 
 # --- ACME / Let's Encrypt ---
-acme_email: "admin@ninux-nnxx.it"
+acme_email: "admin@example.com"
 acme_server: "https://acme-v02.api.letsencrypt.org/directory"  # prod
 # acme_server: "https://acme-staging-v02.api.letsencrypt.org/directory"  # staging
 acme_install_dir: "/opt/acme.sh"
@@ -44,12 +44,12 @@ acme_reload_cmd: "systemctl reload bind9"
 dns_zones_dir_src: "{{ playbook_dir }}/.."
 
 dns_zones:
-  - name: "ninux-nnxx.it"
-    file: "zones/ninux-nnxx.it.yml"
+  - name: "example.com"
+    file: "zones/example.com.yml"
     type: "master"
     ddns_enabled: false
-  - name: "dyn.ninux-nnxx.it"
-    file: "zones/dyn.ninux-nnxx.it.yml"
+  - name: "dyn.example.com"
+    file: "zones/dyn.example.com.yml"
     type: "master"
     ddns_enabled: true
 
@@ -57,16 +57,16 @@ dns_zones:
 # Dichiari solo il CIDR: zone_name e PTR calcolati automaticamente
 # dai record A/AAAA delle zone dirette. IPv4 /8 /16 /24, IPv6 multiplo di 4.
 dns_reverse_zones:
-  - cidr:       "10.27.0.0/16"
-    primary_ns: "dns.ninux-nnxx.it."
-    admin:      "hostmaster.ninux-nnxx.it."
+  - cidr:       "10.0.0.0/16"
+    primary_ns: "dns.example.com."
+    admin:      "hostmaster.example.com."
     ttl:        3600
     ns:
-      - "ns1.ninux-nnxx.it."
-      - "ns2.ninux-nnxx.it."
+      - "ns1.example.com."
+      - "ns2.example.com."
 
 acme_domains:
-  - domain: "ninux-nnxx.it"
+  - domain: "example.com"
     keylength: "ec-256"
 
 # --- Bind9 ---
@@ -77,11 +77,20 @@ bind_zones_dir: "/var/lib/bind/zones"
 bind_log_dir: "/var/log/named"
 
 # ---Proxmox ---
-proxmox_host:          "10.27.22.5"
+proxmox_host:          "10.0.0.5"
 proxmox_node:          "pve"
 proxmox_storage:       "storage"
 proxmox_bridge:        "vmbr0"
 proxmox_template_vmid: 9000
 proxmox_primary_vmid:  100
-proxmox_primary_ip:    "10.27.22.14"
-proxmox_primary_gw:    "10.27.22.5"
+proxmox_primary_ip:    "10.0.0.14"
+proxmox_primary_gw:    "10.0.0.5"
+
+
+# --- SSH: accesso root in locale (host non esposti su Internet) ---
+#hardening_ssh_permit_root: "yes"
+#hardening_ssh_port: 2400
+#hardening_ssh_allow_tcp_forwarding: "yes"
+#hardening_ssh_permit_open:
+#  - "127.0.0.1:3000"
+#  - "127.0.0.1:9090"

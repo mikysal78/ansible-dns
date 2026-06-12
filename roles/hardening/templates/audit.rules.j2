@@ -63,10 +63,8 @@
 # ============================================================
 # Accesso non autorizzato a file (tentativi falliti)
 # ============================================================
--a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate \
-   -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access
--a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate \
-   -F exit=-EPERM  -F auid>=1000 -F auid!=4294967295 -k access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate  -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -k access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate  -F exit=-EPERM  -F auid>=1000 -F auid!=4294967295 -k access
 
 # ============================================================
 # Uso di mount
@@ -77,8 +75,7 @@
 # ============================================================
 # Cancellazione file
 # ============================================================
--a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat \
-   -F auid>=1000 -F auid!=4294967295 -k delete
+-a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat  -F auid>=1000 -F auid!=4294967295 -k delete
 
 # ============================================================
 # Modifiche alle zone DNS (file critici per l'infrastruttura)
@@ -114,4 +111,3 @@
 # Immutabilità: nessuna modifica alle regole a runtime
 # DEVE essere l'ultima riga
 # ============================================================
--e 2

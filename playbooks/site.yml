@@ -25,6 +25,7 @@
     - role: nftables        # firewall (primary: solo secondari e localhost)
     - role: bind9_primary   # BIND9 hidden master + zone files
     - role: dnssec          # inline signing DNSSEC
+    - role: monitoring      # monitoring
     # - role: acme_dns       # disabilitato: primary nascosto, non serve TLS pubblico
 
 - name: Deploy DNS Secondari (pubblici)

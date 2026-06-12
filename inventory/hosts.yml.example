@@ -1,0 +1,46 @@
+---
+# ============================================================
+# INVENTORY DI ESEMPIO — copia in hosts.yml e adatta
+#   cp inventory/hosts.yml.example inventory/hosts.yml
+# ============================================================
+all:
+  children:
+    # Nodo Proxmox VE — solo per creare il template e provisioning VM
+    proxmox:
+      hosts:
+        pve:
+          ansible_host: 10.0.0.5            # IP del nodo Proxmox
+          ansible_user: root
+          ansible_become: true
+
+    # Hidden primary (dietro NAT, non pubblicato negli NS)
+    dns_primary:
+      hosts:
+        ns-primary:
+          ansible_host: 10.0.0.14          # IP privato/LAN del primary
+          wg_address: 10.99.0.1            # IP nel tunnel WireGuard
+          ansible_user: root
+          ansible_become: true
+
+    # Secondari pubblici (es. VPS cloud)
+    dns_secondary:
+      hosts:
+        ns1:
+          ansible_host: 203.0.113.10       # IP pubblico secondario 1
+          wg_address: 10.99.0.2
+          ansible_user: root
+          ansible_become: true
+          dns_secondary_index: 1
+        ns2:
+          ansible_host: 203.0.113.20       # IP pubblico secondario 2
+          wg_address: 10.99.0.3
+          ansible_user: root
+          ansible_become: true
+          dns_secondary_index: 2
+
+    # Router OpenWrt per DDNS (opzionale)
+    openwrt_routers:
+      hosts: {}
+        # router-home:
+        #   ansible_host: 192.168.1.1
+        #   ansible_user: root

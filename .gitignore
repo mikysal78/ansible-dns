@@ -4,17 +4,22 @@
 .vault_pass
 *.vault_pass
 
-# Secrets — mai committare il vault reale
-group_vars/all/vault.yml
-host_vars/*/vault.yml
+# === Secrets — MAI committare il vault reale ===
 **/vault.yml
-
-# Ma il template .example DEVE essere committato (riferimento delle chiavi)
-!group_vars/all/vault.yml.example
+host_vars/*/vault.yml
+# Il template .example DEVE essere committato (riferimento delle chiavi)
 !**/vault.yml.example
 
-# Solo il template va in git, non il vault cifrato
-# Procedura: cp vault.yml.example vault.yml && ansible-vault encrypt vault.yml
+# === Dati reali dell'infrastruttura — solo i .example vanno in git ===
+inventory/hosts.yml
+inventory/group_vars/all/main.yml
+!inventory/hosts.yml.example
+!inventory/group_vars/all/main.yml.example
+
+# Zone reali (tieni solo gli esempi example.com)
+zones/*.yml
+!zones/example.com.yml
+!zones/dyn.example.com.yml
 
 # Python
 __pycache__/
@@ -42,5 +47,4 @@ Thumbs.db
 *.log
 
 # Temp
-/tmp/
 *.tmp

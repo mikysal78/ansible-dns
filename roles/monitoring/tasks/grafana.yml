@@ -4,14 +4,25 @@
 # Installa Grafana e configura dashboard DNS + sistema
 # ============================================================
 
-- name: Aggiungi GPG key Grafana
-  ansible.builtin.apt_key:
-    url: https://apt.grafana.com/gpg.key
-    state: present
+- name: Crea directory keyrings APT
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
-- name: Aggiungi repository Grafana
+- name: Scarica GPG key Grafana
+  ansible.builtin.get_url:
+    url: https://apt.grafana.com/gpg.key
+    dest: /etc/apt/keyrings/grafana.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Aggiungi repository Grafana (con signed-by)
   ansible.builtin.apt_repository:
-    repo: "deb https://apt.grafana.com stable main"
+    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
     state: present
     filename: grafana
 
@@ -73,8 +84,8 @@
   notify: restart grafana
 
 - name: Deploy dashboard JSON DNS
-  ansible.builtin.template:
-    src: grafana-dashboard-dns.json.j2
+  ansible.builtin.copy:
+    src: grafana-dashboard-dns.json
     dest: /var/lib/grafana/dashboards/dns-overview.json
     owner: grafana
     group: grafana
@@ -82,8 +93,8 @@
   notify: restart grafana
 
 - name: Deploy dashboard JSON sistema
-  ansible.builtin.template:
-    src: grafana-dashboard-system.json.j2
+  ansible.builtin.copy:
+    src: grafana-dashboard-system.json
     dest: /var/lib/grafana/dashboards/system-overview.json
     owner: grafana
     group: grafana
