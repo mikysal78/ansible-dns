@@ -45,6 +45,16 @@ jobs:
       - name: Installa collections Ansible
         run: ansible-galaxy collection install -r requirements.yml
 
+      - name: Prepara file di config per la CI (da template)
+        run: |
+          cp inventory/hosts.yml.example inventory/hosts.yml
+          cp inventory/group_vars/all/main.yml.example inventory/group_vars/all/main.yml
+          # vault fittizio per il syntax-check (non contiene segreti reali)
+          cp inventory/group_vars/all/vault.yml.example inventory/group_vars/all/vault.yml
+          echo "ci-dummy-password" > /tmp/ci_vault_pass
+          export ANSIBLE_VAULT_PASSWORD_FILE=/tmp/ci_vault_pass
+
+
       - name: yamllint
         run: yamllint .
 
@@ -75,39 +85,46 @@ jobs:
       - name: Installa collections
         run: ansible-galaxy collection install -r requirements.yml
 
+      - name: Prepara file di config per la CI (da template)
+        run: |
+          cp inventory/hosts.yml.example inventory/hosts.yml
+          cp inventory/group_vars/all/main.yml.example inventory/group_vars/all/main.yml
+          cp inventory/group_vars/all/vault.yml.example inventory/group_vars/all/vault.yml
+
+
       - name: Syntax check — site.yml
         run: |
           ansible-playbook playbooks/site.yml --syntax-check \
             -i inventory/hosts.yml \
-            -e @group_vars/all/main.yml \
+            -e @inventory/group_vars/all/main.yml \
             -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
       - name: Syntax check — update-zones.yml
         run: |
           ansible-playbook playbooks/update-zones.yml --syntax-check \
             -i inventory/hosts.yml \
-            -e @group_vars/all/main.yml \
+            -e @inventory/group_vars/all/main.yml \
             -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
       - name: Syntax check — dnssec-status.yml
         run: |
           ansible-playbook playbooks/dnssec-status.yml --syntax-check \
             -i inventory/hosts.yml \
-            -e @group_vars/all/main.yml \
+            -e @inventory/group_vars/all/main.yml \
             -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
       - name: Syntax check — proxmox.yml
         run: |
           ansible-playbook playbooks/proxmox.yml --syntax-check \
             -i inventory/hosts.yml \
-            -e @group_vars/all/main.yml \
+            -e @inventory/group_vars/all/main.yml \
             -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
       - name: Syntax check — proxmox-snapshot.yml
         run: |
           ansible-playbook playbooks/proxmox-snapshot.yml --syntax-check \
             -i inventory/hosts.yml \
-            -e @group_vars/all/main.yml \
+            -e @inventory/group_vars/all/main.yml \
             -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test vault_grafana_admin_password=test vault_alertmanager_smtp_password=test"
 
   # ============================================================
@@ -145,6 +162,13 @@ jobs:
 
       - name: Installa collections
         run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Prepara file di config per la CI (da template)
+        run: |
+          cp inventory/hosts.yml.example inventory/hosts.yml
+          cp inventory/group_vars/all/main.yml.example inventory/group_vars/all/main.yml
+          cp inventory/group_vars/all/vault.yml.example inventory/group_vars/all/vault.yml
+
 
       - name: Esegui Molecule scenario ${{ matrix.scenario }}
         run: molecule test --scenario-name ${{ matrix.scenario }}
@@ -231,12 +255,12 @@ jobs:
 
       - name: Verifica che vault.yml non sia committato in chiaro
         run: |
-          if [ ! -f group_vars/all/vault.yml ]; then
+          if [ ! -f inventory/group_vars/all/vault.yml ]; then
             echo "✓ vault.yml non presente nel repo (escluso da .gitignore) — corretto"
-          elif head -1 group_vars/all/vault.yml | grep -q '^\$ANSIBLE_VAULT'; then
+          elif head -1 inventory/group_vars/all/vault.yml | grep -q '^\$ANSIBLE_VAULT'; then
             echo "✓ vault.yml presente e cifrato correttamente"
           else
-            echo "✗ ERRORE: group_vars/all/vault.yml è committato IN CHIARO!"
-            echo "  Rimuovilo dal repo o cifralo: ansible-vault encrypt group_vars/all/vault.yml"
+            echo "✗ ERRORE: inventory/group_vars/all/vault.yml è committato IN CHIARO!"
+            echo "  Rimuovilo dal repo o cifralo: ansible-vault encrypt inventory/group_vars/all/vault.yml"
             exit 1
           fi
