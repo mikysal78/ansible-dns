@@ -22,6 +22,7 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - [Setup iniziale](#setup-iniziale)
 - [Configurazione](#configurazione)
 - [Deploy DNS](#deploy-dns)
+- [Tunnel WireGuard](#tunnel-wireguard)
 - [Gestione zone](#gestione-zone)
 - [DNSSEC](#dnssec)
 - [DDNS — Router OpenWrt](#ddns--router-openwrt)
@@ -53,13 +54,14 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 │  │  • fail2ban + nftables + auditd + rkhunter                 │    │
 │  └──────────────────────┬─────────────────────────────────────┘    │
 └─────────────────────────┼───────────────────────────────────────────┘
-                          │ AXFR/IXFR (TSIG hmac-sha256) + NOTIFY
+                          │  Tunnel WireGuard cifrato (10.99.0.0/24)
+                          │  AXFR/IXFR (TSIG) + NOTIFY viaggiano qui dentro
            ┌──────────────┼──────────────┬─────────────┐
            ▼              ▼              ▼             ▼
     ┌────────────┐ ┌────────────┐ ┌────────────┐  fino a 5
     │ ns1 (VPS)  │ │ ns2 (VPS)  │ │ ns3 (VPS)  │  secondari
     │Debian Trixie│ │Debian Trixie│ │Debian Trixie│
-    │            │ │            │ │            │
+    │ wg 10.99.0.2│ │ wg 10.99.0.3│ │ wg 10.99.0.4│
     │ Query DNS  │ │ Query DNS  │ │ Query DNS  │
     │ pubbliche  │ │ pubbliche  │ │ pubbliche  │
     └────────────┘ └────────────┘ └────────────┘
@@ -67,6 +69,10 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
            └──────────────┼──────────────┘
                     UDP/TCP 53 pubblico
                     (rate limiting + anti-amplification)
+
+  Il primary (dietro NAT) inizia il tunnel verso i secondari (endpoint
+  pubblici); PersistentKeepalive mantiene aperto il percorso. Così il
+  primary resta nascosto e il transfer di zona è cifrato end-to-end.
 
     ┌─────────────────────────────────────────┐
     │  Router OpenWrt (DDNS)                  │
@@ -93,6 +99,13 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - **Zone in YAML** — formato leggibile con supporto a tutti i record professionali
 - **AXFR/IXFR autenticato** — chiave TSIG `hmac-sha256`
 - **Record supportati** — A, AAAA, CNAME, MX, TXT, SRV, CAA, TLSA, SSHFP, PTR
+
+### Tunnel WireGuard (primary ↔ secondari)
+- **Trasferimento di zona cifrato** — AXFR/IXFR e NOTIFY viaggiano dentro un tunnel WireGuard, mai in chiaro su internet
+- **Primary dietro NAT** — pensato per il caso reale di un hidden primary in LAN (senza IP pubblico) e secondari su VPS cloud
+- **Topologia roaming peer** — il primary inizia la connessione verso i secondari (endpoint pubblici fissi) con `PersistentKeepalive`, mantenendo aperto il percorso attraverso il NAT
+- **Subnet dedicata** `10.99.0.0/24` — gli IP del tunnel diventano gli indirizzi che BIND usa per il transfer
+- Chiavi generate per host e distribuite automaticamente via `hostvars`
 
 ### DNSSEC
 - **Inline signing automatico** — `dnssec-policy` BIND 9.20, zero intervento manuale
@@ -129,9 +142,11 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 
 ### Monitoring
 - Prometheus + bind_exporter + node_exporter su tutti i nodi
-- Grafana dashboard DNS overview + system health
+- Gli exporter dei secondari sono raggiunti dal primary **via tunnel WireGuard** (non esposti su internet)
+- Grafana 13 con dashboard DNS overview + system health
 - Alertmanager con 14 alert preconfigurati (email/webhook)
 - Alert: BIND down, zone transfer failure, DDoS detection, DNSSEC key expiry
+- Grafana ascolta solo su `127.0.0.1`: accesso via tunnel SSH (vedi sezione Accesso)
 
 ### CI/CD
 - ansible-lint profilo `production` + yamllint
@@ -188,13 +203,14 @@ ansible-dns/
 ├── CHANGELOG.md
 │
 ├── inventory/
-│   └── hosts.yml
-│
-├── group_vars/
-│   └── all/
-│       ├── main.yml           # configurazione globale
-│       ├── vault.yml.example  # template secret (committato)
-│       └── vault.yml          # secret reali cifrati (escluso da git)
+│   ├── hosts.yml              # inventory reale (escluso da git)
+│   ├── hosts.yml.example      # template inventory (committato)
+│   └── group_vars/
+│       └── all/
+│           ├── main.yml           # configurazione globale (escluso da git)
+│           ├── main.yml.example   # template configurazione (committato)
+│           ├── vault.yml.example  # template secret (committato)
+│           └── vault.yml          # secret reali cifrati (escluso da git)
 │
 ├── zones/
 │   ├── example.com.yml
@@ -230,6 +246,7 @@ ansible-dns/
 │   │       ├── rkhunter.yml
 │   │       └── unattended_upgrades.yml
 │   ├── nftables/
+│   ├── wireguard/             # tunnel cifrato primary <-> secondari
 │   ├── bind9_primary/
 │   ├── bind9_secondary/
 │   ├── dnssec/
@@ -281,7 +298,7 @@ ansible-dns/
 
 6. Salva il secret nel vault:
    ```bash
-   ansible-vault edit group_vars/all/vault.yml
+   ansible-vault edit inventory/group_vars/all/vault.yml
    # Aggiorna: vault_proxmox_token_secret: "il-tuo-token-secret"
    ```
 
@@ -378,7 +395,7 @@ ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=delete snap_name=pre-deploy-dns"
 ```
 
-### Configurazione Proxmox (`group_vars/all/main.yml`)
+### Configurazione Proxmox (`inventory/group_vars/all/main.yml`)
 
 ```yaml
 # --- Connessione API ---
@@ -469,7 +486,7 @@ dns_secondary:
 ```
 
 ```yaml
-# group_vars/all/main.yml
+# inventory/group_vars/all/main.yml
 dns_secondary_ips:
   - "203.0.113.10"
   - "51.91.x.x"          # VM OVH
@@ -530,13 +547,13 @@ tsig-keygen -a hmac-sha256 ddns-key
 Copia il template `vault.yml.example` e compilalo con i valori reali:
 
 ```bash
-cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+cp inventory/group_vars/all/vault.yml.example inventory/group_vars/all/vault.yml
 
 # Modifica con i tuoi secret (TSIG, password, token Proxmox)
-$EDITOR group_vars/all/vault.yml
+$EDITOR inventory/group_vars/all/vault.yml
 
 # Cifra il file (non sarà mai committato in chiaro grazie a .gitignore)
-ansible-vault encrypt group_vars/all/vault.yml
+ansible-vault encrypt inventory/group_vars/all/vault.yml
 ```
 
 Le chiavi richieste sono documentate in `vault.yml.example`:
@@ -576,7 +593,7 @@ all:
 ### 5. Aggiungi la chiave SSH pubblica
 
 ```yaml
-# group_vars/all/main.yml
+# inventory/group_vars/all/main.yml
 cloudinit_ssh_authorized_keys:
   - "ssh-ed25519 AAAA... tua-chiave"
 
@@ -589,7 +606,7 @@ hardening_ssh_authorized_keys:
 
 ## Configurazione
 
-### Variabili principali (`group_vars/all/main.yml`)
+### Variabili principali (`inventory/group_vars/all/main.yml`)
 
 | Variabile | Default | Descrizione |
 |---|---|---|
@@ -679,6 +696,65 @@ packages → hardening → nftables → bind9_primary → dnssec → acme_dns �
 
 ---
 
+## Tunnel WireGuard
+
+Il primary è un **hidden master in LAN dietro NAT**, senza IP pubblico. I secondari sono su VPS pubblici. Senza un percorso tra i due, l'AXFR non potrebbe funzionare (un IP privato non è instradabile su internet). La soluzione è un tunnel WireGuard cifrato.
+
+### Topologia
+
+Il primary (dietro NAT) **inizia** la connessione verso i secondari, che hanno endpoint pubblici fissi. `PersistentKeepalive` tiene aperto il percorso attraverso il NAT. Una volta su, il tunnel è bidirezionale e AXFR/NOTIFY ci viaggiano dentro cifrati.
+
+```
+Primary (NAT)              Secondari (IP pubblici)
+10.99.0.1   ──connette──►  10.99.0.2  (ns1, ascolta :51820)
+            ──connette──►  10.99.0.3  (ns2, ascolta :51820)
+            keepalive 25s mantiene aperti i buchi NAT
+```
+
+### Configurazione
+
+Ogni host DNS ha un indirizzo nel tunnel, assegnato nell'inventory:
+
+```yaml
+# inventory/hosts.yml
+ns-primary:
+  ansible_host: 10.0.0.14
+  wg_address: 10.99.0.1      # IP nel tunnel
+ns1:
+  ansible_host: 203.0.113.10
+  wg_address: 10.99.0.2
+ns2:
+  ansible_host: 203.0.113.20
+  wg_address: 10.99.0.3
+```
+
+Gli IP DNS usati per il transfer puntano al tunnel:
+
+```yaml
+# inventory/group_vars/all/main.yml
+dns_primary_ip: "10.99.0.1"
+dns_secondary_ips:
+  - "10.99.0.2"
+  - "10.99.0.3"
+```
+
+Il play WireGuard in `site.yml` gira su primary e secondari **insieme**, perché il template ha bisogno delle chiavi pubbliche di tutti gli host (via `hostvars`).
+
+### Verifica
+
+```bash
+# handshake attivo con entrambi i peer?
+ssh -p 2400 root@10.0.0.14 "wg show"
+
+# il primary raggiunge i secondari nel tunnel?
+ssh -p 2400 root@10.0.0.14 "ping -c2 10.99.0.2"
+
+# AXFR funziona via tunnel?
+ssh -p 2400 root@10.0.0.14 "dig @127.0.0.1 example.com AXFR | head"
+```
+
+---
+
 ## Gestione zone
 
 ### Aggiornamento con serial automatico
@@ -706,7 +782,7 @@ ansible-playbook playbooks/update-zones.yml --ask-vault-pass \
 ### Aggiungere una zona
 
 1. Crea `zones/nuova-zona.com.yml`
-2. Aggiungi in `group_vars/all/main.yml`:
+2. Aggiungi in `inventory/group_vars/all/main.yml`:
    ```yaml
    dns_zones:
      - name: "nuova-zona.com"
@@ -786,16 +862,23 @@ Lo script rileva automaticamente CGNAT e ottiene l'IP pubblico reale.
 
 ### Accesso via SSH tunnel
 
+Grafana, Prometheus e Alertmanager ascoltano solo su `127.0.0.1` del primary.
+Il role hardening abilita `PermitOpen` solo per le porte di monitoraggio, così
+il forwarding è ristretto a queste e nient'altro.
+
 ```bash
-ssh -L 9090:127.0.0.1:9090 \
+ssh -p 2400 \
+    -L 9090:127.0.0.1:9090 \
     -L 3000:127.0.0.1:3000 \
     -L 9093:127.0.0.1:9093 \
-    ansible@192.168.1.10
+    root@10.0.0.14
 
 # Grafana:      http://localhost:3000
 # Prometheus:   http://localhost:9090
 # Alertmanager: http://localhost:9093
 ```
+
+> Login Grafana: utente `admin`, password dal vault (`vault_grafana_admin_password`).
 
 ### Alert preconfigurati
 
@@ -813,7 +896,7 @@ ssh -L 9090:127.0.0.1:9090 \
 ### Notifiche email
 
 ```yaml
-# group_vars/all/main.yml
+# inventory/group_vars/all/main.yml
 alertmanager_smtp_enabled: true
 alertmanager_smtp_host: "smtp.gmail.com:587"
 alertmanager_smtp_from: "alerts@example.com"
@@ -821,7 +904,7 @@ alertmanager_smtp_to: "admin@example.com"
 ```
 
 ```yaml
-# group_vars/all/vault.yml
+# inventory/group_vars/all/vault.yml
 vault_alertmanager_smtp_password: "app_password"
 ```
 
@@ -916,7 +999,7 @@ tag vX.Y.Z → release (archivio + changelog automatico)
 yamllint .
 ansible-lint
 ansible-playbook playbooks/site.yml --syntax-check \
-  -i inventory/hosts.yml -e @group_vars/all/main.yml \
+  -i inventory/hosts.yml -e @inventory/group_vars/all/main.yml \
   -e "vault_tsig_secret=test vault_ddns_secret=test vault_proxmox_token_secret=test"
 molecule test
 ```
@@ -1019,8 +1102,8 @@ journalctl -u pvedaemon -n 50
 
 ```bash
 # Controlla lo status cloud-init sulla VM
-ssh ansible@192.168.1.10 "cloud-init status"
-ssh ansible@192.168.1.10 "cat /var/log/cloud-init.log | tail -30"
+ssh -p 2400 root@10.0.0.14 "cloud-init status"
+ssh -p 2400 root@10.0.0.14 "cat /var/log/cloud-init.log | tail -30"
 
 # Rigenera immagine cloud-init e riavvia
 qm set 200 --cicustom ""
@@ -1047,11 +1130,11 @@ qm showcmd 200
 
 ### Gestione secret
 
-Tutti i secret sono in `group_vars/all/vault.yml` cifrato con ansible-vault. Il file in chiaro non deve mai essere committato. Il `.gitignore` esclude il vault non cifrato.
+Tutti i secret sono in `inventory/group_vars/all/vault.yml` cifrato con ansible-vault. Il file in chiaro non deve mai essere committato. Il `.gitignore` esclude il vault non cifrato.
 
 ```bash
 # Verifica che il vault sia cifrato
-head -1 group_vars/all/vault.yml
+head -1 inventory/group_vars/all/vault.yml
 # Output atteso: $ANSIBLE_VAULT;1.1;AES256
 ```
 
@@ -1059,7 +1142,7 @@ head -1 group_vars/all/vault.yml
 
 ```bash
 tsig-keygen -a hmac-sha256 axfr-key-new
-ansible-vault edit group_vars/all/vault.yml
+ansible-vault edit inventory/group_vars/all/vault.yml
 ansible-playbook playbooks/site.yml --ask-vault-pass
 dig @192.168.1.10 example.com AXFR   # verifica
 ```
