@@ -687,6 +687,22 @@ ansible-playbook playbooks/site.yml --tags hardening --ask-vault-pass
 ansible-playbook playbooks/site.yml --check --diff --ask-vault-pass
 ```
 
+### Riepilogo variabili vault a fine deploy
+
+`site.yml` termina con una play che stampa le variabili del vault
+(`vault_tsig_secret`, `vault_ddns_secret`, ecc.). Poiché il deploy gira su
+shell fidata, i valori sono mostrati **in chiaro** per verifica rapida.
+
+```bash
+# nasconde i valori, mostra solo nome + stato (definita / NON definita)
+ansible-playbook playbooks/site.yml --ask-vault-pass -e reveal_secrets=false
+```
+
+> ⚠️ I valori in chiaro finiscono nello stdout e nei log del terminale: non
+> eseguire `site.yml` con l'output di default su shell condivise o in CI.
+> Per ispezionare il vault cifrato senza eseguire il playbook:
+> `ansible-vault view inventory/group_vars/all/vault.yml`.
+
 ### Ordine roles in `site.yml`
 
 ```

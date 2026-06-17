@@ -12,6 +12,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Template OpenWISP 2 per DDNS via `nsupdate` (`openwisp/openwisp-ddns-template.json`, backend OpenWRT): spinge sui device OpenWrt lo script `update_nsupdate.sh`, la chiave TSIG, la sezione UCI `/etc/config/ddns` e uno script `uci-defaults` che installa `ddns-scripts`/`bind-client`/`curl` al primo apply
 - Hostname per-device automatico tramite variabile predefinita `{{ name }}` (`router-<device>.<ddns_zone>`); parametri (zona, IP primary, segreto TSIG, intervalli) come `default_values` del template
 - Documentazione in `openwisp/README.md` (import, variabili, note operative)
+- `site.yml`: play finale di riepilogo delle variabili vault. Valori mostrati in chiaro di default (deploy su shell fidata); `-e reveal_secrets=false` per vedere solo nome e stato
 
 ### Corretto
 - CI: rimosso `vault_password_file` macchina-specifico (`/git/.vault_pass`) da `ansible.cfg`, che faceva fallire il `--syntax-check` di `ansible-lint` sul runner. Il path del vault va impostato in locale via `ANSIBLE_VAULT_PASSWORD_FILE` o `--ask-vault-pass`

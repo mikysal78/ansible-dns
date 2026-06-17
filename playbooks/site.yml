@@ -42,3 +42,35 @@
   gather_facts: false
   roles:
     - role: ddns_openwrt
+
+# ------------------------------------------------------------
+# Riepilogo variabili vault a fine deploy.
+# I valori sono mostrati in chiaro (il playbook gira su shell fidata).
+# Per nascondere i valori e vedere solo lo stato: -e reveal_secrets=false
+# ------------------------------------------------------------
+- name: Riepilogo variabili vault
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    reveal_secrets: true
+    vault_keys:
+      - vault_tsig_secret
+      - vault_ddns_secret
+      - vault_acme_email
+      - vault_grafana_admin_password
+      - vault_alertmanager_smtp_password
+      - vault_proxmox_token_secret
+  tasks:
+    - name: Variabili vault
+      ansible.builtin.debug:
+        msg: >-
+          {{ item }}:
+          {{ 'NON definita'
+             if (lookup('vars', item, default='') | string | length == 0)
+             else (lookup('vars', item)
+                   if (reveal_secrets | bool)
+                   else 'definita (' ~ (lookup('vars', item) | string | length) ~ ' char)') }}
+      loop: "{{ vault_keys }}"
+      loop_control:
+        label: "{{ item }}"
