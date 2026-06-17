@@ -1,0 +1,40 @@
+{
+  "_comment": "Template OpenWISP2 DDNS nsupdate. Backend=OpenWRT. Incolla 'config' nell'editor JSON del Template e 'default_values' nel campo Default Values. L'hostname diventa router-<nome device>.<ddns_zone>.",
+  "backend": "netjsonconfig.backends.openwrt.OpenWrt",
+  "config": {
+    "files": [
+      {
+        "path": "/usr/lib/ddns/update_nsupdate.sh",
+        "mode": "0755",
+        "contents": "#!/bin/sh\n# ============================================================\n# DDNS via nsupdate (TSIG) - gestito da OpenWISP\n# Spinto come additional file dal template NetJSON.\n# ============================================================\nDNS_SERVER=\"{{ dns_primary_ip }}\"\nTSIG_KEY=\"/etc/ddns/ddns.key\"\nDDNS_ZONE=\"{{ ddns_zone }}\"\nHOSTNAME=\"router-{{ name }}.{{ ddns_zone }}\"\nTTL=\"{{ ddns_ttl }}\"\n\nupdate_dns() {\n    ip=\"$1\"\n    logger -t ddns \"Aggiornamento ${HOSTNAME} -> ${ip}\"\n    nsupdate -k \"${TSIG_KEY}\" <<EOF\nserver ${DNS_SERVER}\nzone ${DDNS_ZONE}\nupdate delete ${HOSTNAME}. A\nupdate add ${HOSTNAME}. ${TTL} A ${ip}\nsend\nEOF\n}\n\nget_public_ip() {\n    iface_ip=$(ip -4 addr show {{ ddns_interface }} | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)\n    case \"$iface_ip\" in\n        10.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|192.168.*|100.6[4-9].*|100.[7-9][0-9].*|100.1[0-1][0-9].*|100.12[0-7].*)\n            curl -s https://ipv4.icanhazip.com 2>/dev/null ;;\n        *) echo \"$iface_ip\" ;;\n    esac\n}\n\nCURRENT_IP=$(get_public_ip)\n[ -z \"$CURRENT_IP\" ] && { logger -t ddns \"ERRORE: IP pubblico non determinato\"; exit 1; }\nupdate_dns \"$CURRENT_IP\"\n"
+      },
+      {
+        "path": "/etc/ddns/ddns.key",
+        "mode": "0600",
+        "contents": "key \"{{ ddns_key_name }}\" {\n    algorithm {{ ddns_algorithm }};\n    secret \"{{ ddns_secret }}\";\n};\n"
+      },
+      {
+        "path": "/etc/config/ddns",
+        "mode": "0644",
+        "contents": "config service '{{ ddns_section }}'\n    option enabled '1'\n    option service_name 'custom'\n    option update_script '/usr/lib/ddns/update_nsupdate.sh'\n    option lookup_host 'router-{{ name }}.{{ ddns_zone }}'\n    option domain 'router-{{ name }}.{{ ddns_zone }}'\n    option interface '{{ ddns_interface }}'\n    option ip_source 'network'\n    option ip_network '{{ ddns_interface }}'\n    option check_interval '{{ ddns_check_interval }}'\n    option check_unit 'seconds'\n    option force_interval '{{ ddns_force_interval }}'\n    option force_unit 'hours'\n    option retry_count '5'\n    option retry_interval '60'\n    option use_syslog '2'\n"
+      },
+      {
+        "path": "/etc/uci-defaults/99-install-ddns",
+        "mode": "0755",
+        "contents": "#!/bin/sh\n# Eseguito una sola volta (uci-defaults): installa i pacchetti DDNS.\n# Ritorna 0 per essere rimosso dopo l'esecuzione.\nopkg update 2>/dev/null\nopkg install ddns-scripts bind-client curl 2>/dev/null\n/etc/init.d/ddns enable 2>/dev/null\n/etc/init.d/ddns restart 2>/dev/null\nexit 0\n"
+      }
+    ]
+  },
+  "default_values": {
+    "ddns_zone": "dyn.ninux-nnxx.it",
+    "dns_primary_ip": "10.27.0.1",
+    "ddns_interface": "wan",
+    "ddns_ttl": "60",
+    "ddns_key_name": "ddns-key",
+    "ddns_algorithm": "hmac-sha256",
+    "ddns_secret": "CHANGEME-inserire-il-segreto-TSIG",
+    "ddns_section": "ninux",
+    "ddns_check_interval": "300",
+    "ddns_force_interval": "72"
+  }
+}
