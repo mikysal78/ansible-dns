@@ -8,7 +8,7 @@ $TTL    {{ zone_data.zone.ttl | default(3600) }}
 
 ; --- SOA ---
 @   IN  SOA {{ zone_data.zone.soa.primary_ns }} {{ zone_data.zone.soa.admin }} (
-                {{ zone_serial_override | default(ansible_date_time.date | replace("-","") ~ "01") }} ; serial YYYYMMDDNN
+                {{ zone_serial_override | default(ansible_facts.date_time.date | replace("-","") ~ "01") }} ; serial YYYYMMDDNN
                 {{ zone_data.zone.soa.refresh  | default(7200)   }} ; refresh
                 {{ zone_data.zone.soa.retry    | default(3600)   }} ; retry
                 {{ zone_data.zone.soa.expire   | default(1209600)}} ; expire

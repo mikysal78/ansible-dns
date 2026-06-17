@@ -6,7 +6,7 @@
 
 $TTL    {{ rev.ttl | default(3600) }}
 @   IN  SOA {{ rev.primary_ns }} {{ rev.admin }} (
-                {{ zone_serial_override | default(ansible_date_time.date | replace("-","") ~ "01") }} ; serial
+                {{ zone_serial_override | default(ansible_facts.date_time.date | replace("-","") ~ "01") }} ; serial
                 7200       ; refresh
                 3600       ; retry
                 1209600    ; expire

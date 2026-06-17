@@ -2,11 +2,15 @@
 # ============================================================
 # bind9_primary — DICHIARAZIONI DI ZONA E ZONE FILE
 # ------------------------------------------------------------
-# Questo file contiene TUTTO il lavoro sulle zone ed è pensato per
-# essere eseguito anche da solo (es. playbooks/update-zones.yml con
-# import_role tasks_from=zones), così da aggiornare tutte le zone
-# — dirette statiche, DDNS e reverse — senza ripetere installazione,
-# chiavi e opzioni globali.
+# Eseguibile anche da solo (playbooks/update-zones.yml,
+# import_role tasks_from=zones) per aggiornare tutte le zone
+# — dirette statiche, DDNS e reverse — senza ripetere
+# installazione, chiavi e opzioni globali.
+#
+# Serial: idempotente. Il file viene prima rigenerato col serial
+# CORRENTE (se i record non cambiano resta identico → nessuna
+# modifica); il serial viene incrementato SOLO per le zone i cui
+# record sono effettivamente cambiati.
 # ============================================================
 
 - name: Deploy named.conf.local (dichiarazioni di zona)
@@ -33,10 +37,7 @@
   when: mixed_ip_hosts | length > 0
 
 # ------------------------------------------------------------
-# SERIAL MONOTONO
-# Legge il serial SOA attualmente servito e lo incrementa, senza mai
-# scendere sotto YYYYMMDD01. Evita che i secondari ignorino la zona e che
-# si vada a ritroso rispetto al serial già bumpato dagli update DDNS.
+# SERIAL CORRENTE
 # ------------------------------------------------------------
 - name: Rileva il serial SOA corrente delle zone dirette
   ansible.builtin.command:
@@ -48,23 +49,23 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: Calcola il nuovo serial per ogni zona (incremento monotono)
+- name: Mappa zona → serial corrente (0 se la zona non esiste ancora)
   ansible.builtin.set_fact:
-    zone_serials: >-
-      {{ zone_serials | default({}) | combine({
-        item.item.name: [
-          ((item.stdout.split() | length) > 2) | ternary((item.stdout.split()[2] | default('0') | int) + 1, 0),
-          ((ansible_date_time.date | replace('-', '')) ~ '00') | int + 1
-        ] | max
+    zone_cur_serial: >-
+      {{ zone_cur_serial | default({}) | combine({
+        item.item.name: (((item.stdout.split() | length) > 2)
+                         | ternary(item.stdout.split()[2] | default('0'), '0'))
       }) }}
   loop: "{{ soa_query.results }}"
   loop_control:
     label: "{{ item.item.name }}"
 
 # ------------------------------------------------------------
-# ZONE STATICHE (ddns_enabled = false): rigenerate ad ogni run
+# ZONE STATICHE (ddns_enabled = false)
+# Passata 1: render col serial corrente → idempotente se i record
+# non cambiano. Se cambiano, il task risulta "changed".
 # ------------------------------------------------------------
-- name: Genera zone file statiche da YAML
+- name: Genera zone file statiche (serial corrente)
   ansible.builtin.template:
     src: zone.db.j2
     dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
@@ -77,14 +78,42 @@
   when: not (item.ddns_enabled | default(false))
   vars:
     zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
-    zone_serial_override: "{{ zone_serials[item.name] }}"
+    zone_serial_override: "{{ zone_cur_serial[item.name] }}"
+  register: zone_render
+
+# Passata 2: SOLO per le zone i cui record sono cambiati, incrementa
+# il serial (monotòno, mai sotto YYYYMMDD01) e riscrivi → reload.
+- name: Calcola nuovo serial per le zone modificate
+  ansible.builtin.set_fact:
+    zone_serials: >-
+      {{ zone_serials | default({}) | combine({
+        item.item.name: [
+          (zone_cur_serial[item.item.name] | int) + 1,
+          ((ansible_facts.date_time.date | replace('-', '')) ~ '00') | int + 1
+        ] | max
+      }) }}
+  loop: "{{ zone_render.results | default([]) | rejectattr('skipped', 'defined') | selectattr('changed') | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Riscrivi le zone statiche modificate con serial incrementato
+  ansible.builtin.template:
+    src: zone.db.j2
+    dest: "{{ bind_zones_dir }}/db.{{ item.item.name }}"
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0644"
+  loop: "{{ zone_render.results | default([]) | rejectattr('skipped', 'defined') | selectattr('changed') | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  vars:
+    zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.item.file) | from_yaml }}"
+    zone_serial_override: "{{ zone_serials[item.item.name] }}"
   notify: reload bind9
 
 # ------------------------------------------------------------
 # ZONE DDNS — SEED (default): scrive il file SOLO se non esiste.
-# I record vengono poi gestiti dai client via nsupdate; il file su disco
-# non viene più toccato, così non si perdono gli aggiornamenti dinamici
-# né si crea conflitto col journal .jnl.
+# I record sono poi gestiti dai client via nsupdate.
 # ------------------------------------------------------------
 - name: Seed iniziale zone DDNS (solo se il file non esiste)
   ansible.builtin.template:
@@ -102,15 +131,14 @@
     - not (dns_force_ddns_rewrite | default(false))
   vars:
     zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
-    zone_serial_override: "{{ zone_serials[item.name] }}"
+    zone_serial_override: "{{ (ansible_facts.date_time.date | replace('-', '')) ~ '01' }}"
   notify: reload bind9
 
 # ------------------------------------------------------------
 # ZONE DDNS — RISCRITTURA FORZATA (opt-in: dns_force_ddns_rewrite=true)
-# Sequenza corretta per riscrivere una zona dinamica:
-#   rndc freeze -> scrittura file (serial più alto) -> rndc thaw (ricarica)
-# ATTENZIONE: i record dinamici tornano ai placeholder finché i client
-# non si ri-registrano (TTL basso, ri-registrazione rapida).
+#   rndc freeze → scrittura (serial più alto) → rndc thaw (ricarica)
+# ATTENZIONE: i record dinamici tornano ai placeholder finché i
+# client non si ri-registrano.
 # ------------------------------------------------------------
 - name: Freeze delle zone DDNS prima della riscrittura forzata
   ansible.builtin.command:
@@ -139,7 +167,9 @@
     - dns_force_ddns_rewrite | default(false)
   vars:
     zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
-    zone_serial_override: "{{ zone_serials[item.name] }}"
+    zone_serial_override: >-
+      {{ [ (zone_cur_serial[item.name] | int) + 1,
+           ((ansible_facts.date_time.date | replace('-', '')) ~ '00') | int + 1 ] | max }}
 
 - name: Thaw delle zone DDNS (ricarica il file e riabilita gli update dinamici)
   ansible.builtin.command:

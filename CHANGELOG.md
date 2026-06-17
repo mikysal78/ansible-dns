@@ -13,6 +13,11 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 - Hostname per-device automatico tramite variabile predefinita `{{ name }}` (`router-<device>.<ddns_zone>`); parametri (zona, IP primary, segreto TSIG, intervalli) come `default_values` del template
 - Documentazione in `openwisp/README.md` (import, variabili, note operative)
 
+### Corretto
+- CI: rimosso `vault_password_file` macchina-specifico (`/git/.vault_pass`) da `ansible.cfg`, che faceva fallire il `--syntax-check` di `ansible-lint` sul runner. Il path del vault va impostato in locale via `ANSIBLE_VAULT_PASSWORD_FILE` o `--ask-vault-pass`
+- `bind9_primary`: generazione delle zone ora idempotente. Il serial viene incrementato solo quando i record cambiano davvero (render col serial corrente + bump mirato), risolvendo il fallimento del test di idempotenza Molecule introdotto dal serial monotòno
+- `bind9_primary`: usato `ansible_facts.date_time` al posto di `ansible_date_time` (deprecato, in rimozione in ansible-core 2.24) nei template di zona
+
 ## [1.4.1] — 2026-06-18
 
 ### Corretto
