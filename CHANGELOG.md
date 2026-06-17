@@ -6,6 +6,19 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.4.1] — 2026-06-18
+
+### Corretto
+- `bind9_primary`: le zone DDNS non vengono più sovrascritte ad ogni run. Il file di zona viene scritto solo al primo seed (`force: false`); i record restano gestiti dai client via `nsupdate`, evitando la perdita degli aggiornamenti dinamici e il conflitto col journal `.jnl`
+- `bind9_primary`: serial SOA ora monotòno (letto dal server con `dig` e incrementato, mai sotto `YYYYMMDD01`), al posto del valore fisso `YYYYMMDD01` che impediva i trasferimenti ai secondari e poteva regredire rispetto al serial già incrementato dal DDNS
+
+### Aggiunto
+- `bind9_primary`: flag `dns_force_ddns_rewrite` per rigenerare la base di una zona DDNS da YAML con la sequenza corretta `rndc freeze` → scrittura → `rndc thaw`
+- Suddivisione di `roles/bind9_primary/tasks` in `install.yml`, `keys.yml`, `options.yml`, `zones.yml`, `service.yml` per consentire run mirati sulle sole zone
+
+### Modificato
+- `playbooks/update-zones.yml` riscritto come wrapper della sola parte `zones` del ruolo: un solo comando aggiorna zone dirette statiche, DDNS e reverse, senza reinstallazione né restart del servizio (solo reload), con `flush_handlers` e verifica della propagazione del serial sui secondari (escluse le zone DDNS, il cui serial è guidato dagli update `nsupdate`)
+
 ## [1.4.0] — 2026-06-12
 
 ### Aggiunto
