@@ -1,141 +1,24 @@
 ---
 # ============================================================
 # TASKS — bind9_primary
+# ------------------------------------------------------------
+# Suddiviso in file per consentire run mirati. In particolare la
+# parte 'zones' è eseguibile da sola (vedi playbooks/update-zones.yml,
+# import_role tasks_from=zones) per aggiornare tutte le zone senza
+# ripetere installazione, chiavi e opzioni globali.
 # ============================================================
 
-- name: Installa pacchetti BIND9
-  ansible.builtin.apt:
-    name: "{{ bind_packages }}"
-    state: present
-    update_cache: true
+- name: Installazione pacchetti e filesystem
+  ansible.builtin.import_tasks: install.yml
 
-- name: Crea directory per le zone
-  ansible.builtin.file:
-    path: "{{ bind_zones_dir }}"
-    state: directory
-    owner: "{{ bind_user }}"
-    group: "{{ bind_group }}"
-    mode: "0755"
+- name: Chiavi TSIG / DDNS
+  ansible.builtin.import_tasks: keys.yml
 
-- name: Aggiungi l'utente BIND al gruppo adm (accesso a /var/log)
-  ansible.builtin.user:
-    name: "{{ bind_user }}"
-    groups: adm
-    append: true
-  notify: restart bind9
+- name: Opzioni globali named
+  ansible.builtin.import_tasks: options.yml
 
-- name: Crea directory log
-  ansible.builtin.file:
-    path: "{{ bind_log_dir }}"
-    state: directory
-    owner: "{{ bind_user }}"
-    group: "{{ bind_group }}"
-    mode: "0755"
+- name: Dichiarazioni di zona e zone file (dirette, DDNS, reverse)
+  ansible.builtin.import_tasks: zones.yml
 
-- name: Deploy TSIG key file
-  ansible.builtin.template:
-    src: tsig.key.j2
-    dest: "{{ bind_config_dir }}/tsig-axfr.key"
-    owner: root
-    group: "{{ bind_group }}"
-    mode: "0640"
-  notify: reload bind9
-
-- name: Deploy DDNS key file
-  ansible.builtin.template:
-    src: ddns.key.j2
-    dest: "{{ bind_config_dir }}/ddns.key"
-    owner: root
-    group: "{{ bind_group }}"
-    mode: "0640"
-  notify: reload bind9
-
-- name: Deploy named.conf.options
-  ansible.builtin.template:
-    src: named.conf.options.j2
-    dest: "{{ bind_config_dir }}/named.conf.options"
-    owner: root
-    group: "{{ bind_group }}"
-    mode: "0640"
-    validate: "named-checkconf %s"
-  notify: restart bind9
-
-- name: Deploy named.conf.local (zone declarations)
-  ansible.builtin.template:
-    src: named.conf.local.j2
-    dest: "{{ bind_config_dir }}/named.conf.local"
-    owner: root
-    group: "{{ bind_group }}"
-    mode: "0640"
-    validate: "named-checkconf %s"
-  notify: reload bind9
-
-- name: Rileva host con IP misti pubblico/privato (avviso)
-  ansible.builtin.set_fact:
-    mixed_ip_hosts: "{{ lookup('template', 'mixed_ip_warnings.j2') | from_yaml }}"
-
-- name: Avvisa se ci sono host con IP misti pubblico/privato
-  ansible.builtin.debug:
-    msg: >-
-      ATTENZIONE: i seguenti host hanno record A che mescolano IP pubblici e
-      privati sotto lo stesso nome. Da fuori rete i client potrebbero tentare
-      l'IP privato (irraggiungibile). Valuta nomi distinti (es. host.internal)
-      o split-horizon. Host: {{ mixed_ip_hosts | join(' | ') }}
-  when: mixed_ip_hosts | length > 0
-
-- name: Genera zone file da YAML per ogni zona
-  ansible.builtin.template:
-    src: zone.db.j2
-    dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
-    owner: "{{ bind_user }}"
-    group: "{{ bind_group }}"
-    mode: "0644"
-  loop: "{{ dns_zones }}"
-  vars:
-    zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
-  notify: reload bind9
-
-- name: Verifica sintassi zone files
-  ansible.builtin.command:
-    cmd: "named-checkzone {{ item.name }} {{ bind_zones_dir }}/db.{{ item.name }}"
-  loop: "{{ dns_zones }}"
-  changed_when: false
-
-# ============================================================
-# ZONE REVERSE AUTOMATICHE (da CIDR)
-# ============================================================
-
-- name: Calcola metadati zone reverse dal CIDR
-  ansible.builtin.set_fact:
-    reverse_zones_computed: "{{ reverse_zones_computed | default([]) + [rev | combine(lookup('template', 'reverse_meta.j2') | from_yaml)] }}"
-  loop: "{{ dns_reverse_zones | default([]) }}"
-  loop_control:
-    loop_var: rev
-
-- name: Genera zone reverse da YAML per ogni rete
-  ansible.builtin.template:
-    src: zone.reverse.db.j2
-    dest: "{{ bind_zones_dir }}/db.{{ rev.zone_name }}"
-    owner: "{{ bind_user }}"
-    group: "{{ bind_group }}"
-    mode: "0644"
-  loop: "{{ reverse_zones_computed | default([]) }}"
-  loop_control:
-    loop_var: rev
-  vars:
-    rev_ptr_records: "{{ lookup('template', 'reverse_ptr_collect.j2') | from_yaml }}"
-  notify: reload bind9
-
-- name: Verifica sintassi zone reverse
-  ansible.builtin.command:
-    cmd: "named-checkzone {{ rev.zone_name }} {{ bind_zones_dir }}/db.{{ rev.zone_name }}"
-  loop: "{{ reverse_zones_computed | default([]) }}"
-  loop_control:
-    loop_var: rev
-  changed_when: false
-
-- name: Assicura che bind9 sia abilitato e avviato
-  ansible.builtin.systemd:
-    name: bind9
-    enabled: true
-    state: started
+- name: Servizio bind9
+  ansible.builtin.import_tasks: service.yml

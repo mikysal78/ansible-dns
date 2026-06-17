@@ -1,0 +1,194 @@
+---
+# ============================================================
+# bind9_primary — DICHIARAZIONI DI ZONA E ZONE FILE
+# ------------------------------------------------------------
+# Questo file contiene TUTTO il lavoro sulle zone ed è pensato per
+# essere eseguito anche da solo (es. playbooks/update-zones.yml con
+# import_role tasks_from=zones), così da aggiornare tutte le zone
+# — dirette statiche, DDNS e reverse — senza ripetere installazione,
+# chiavi e opzioni globali.
+# ============================================================
+
+- name: Deploy named.conf.local (dichiarazioni di zona)
+  ansible.builtin.template:
+    src: named.conf.local.j2
+    dest: "{{ bind_config_dir }}/named.conf.local"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+    validate: "named-checkconf %s"
+  notify: reload bind9
+
+- name: Rileva host con IP misti pubblico/privato (avviso)
+  ansible.builtin.set_fact:
+    mixed_ip_hosts: "{{ lookup('template', 'mixed_ip_warnings.j2') | from_yaml }}"
+
+- name: Avvisa se ci sono host con IP misti pubblico/privato
+  ansible.builtin.debug:
+    msg: >-
+      ATTENZIONE: i seguenti host hanno record A che mescolano IP pubblici e
+      privati sotto lo stesso nome. Da fuori rete i client potrebbero tentare
+      l'IP privato (irraggiungibile). Valuta nomi distinti (es. host.internal)
+      o split-horizon. Host: {{ mixed_ip_hosts | join(' | ') }}
+  when: mixed_ip_hosts | length > 0
+
+# ------------------------------------------------------------
+# SERIAL MONOTONO
+# Legge il serial SOA attualmente servito e lo incrementa, senza mai
+# scendere sotto YYYYMMDD01. Evita che i secondari ignorino la zona e che
+# si vada a ritroso rispetto al serial già bumpato dagli update DDNS.
+# ------------------------------------------------------------
+- name: Rileva il serial SOA corrente delle zone dirette
+  ansible.builtin.command:
+    cmd: "dig +short @127.0.0.1 SOA {{ item.name }}"
+  register: soa_query
+  changed_when: false
+  failed_when: false
+  loop: "{{ dns_zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Calcola il nuovo serial per ogni zona (incremento monotono)
+  ansible.builtin.set_fact:
+    zone_serials: >-
+      {{ zone_serials | default({}) | combine({
+        item.item.name: [
+          ((item.stdout.split() | length) > 2) | ternary((item.stdout.split()[2] | default('0') | int) + 1, 0),
+          ((ansible_date_time.date | replace('-', '')) ~ '00') | int + 1
+        ] | max
+      }) }}
+  loop: "{{ soa_query.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+# ------------------------------------------------------------
+# ZONE STATICHE (ddns_enabled = false): rigenerate ad ogni run
+# ------------------------------------------------------------
+- name: Genera zone file statiche da YAML
+  ansible.builtin.template:
+    src: zone.db.j2
+    dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0644"
+  loop: "{{ dns_zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (item.ddns_enabled | default(false))
+  vars:
+    zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
+    zone_serial_override: "{{ zone_serials[item.name] }}"
+  notify: reload bind9
+
+# ------------------------------------------------------------
+# ZONE DDNS — SEED (default): scrive il file SOLO se non esiste.
+# I record vengono poi gestiti dai client via nsupdate; il file su disco
+# non viene più toccato, così non si perdono gli aggiornamenti dinamici
+# né si crea conflitto col journal .jnl.
+# ------------------------------------------------------------
+- name: Seed iniziale zone DDNS (solo se il file non esiste)
+  ansible.builtin.template:
+    src: zone.db.j2
+    dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0644"
+    force: false
+  loop: "{{ dns_zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.ddns_enabled | default(false)
+    - not (dns_force_ddns_rewrite | default(false))
+  vars:
+    zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
+    zone_serial_override: "{{ zone_serials[item.name] }}"
+  notify: reload bind9
+
+# ------------------------------------------------------------
+# ZONE DDNS — RISCRITTURA FORZATA (opt-in: dns_force_ddns_rewrite=true)
+# Sequenza corretta per riscrivere una zona dinamica:
+#   rndc freeze -> scrittura file (serial più alto) -> rndc thaw (ricarica)
+# ATTENZIONE: i record dinamici tornano ai placeholder finché i client
+# non si ri-registrano (TTL basso, ri-registrazione rapida).
+# ------------------------------------------------------------
+- name: Freeze delle zone DDNS prima della riscrittura forzata
+  ansible.builtin.command:
+    cmd: "rndc freeze {{ item.name }}"
+  loop: "{{ dns_zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.ddns_enabled | default(false)
+    - dns_force_ddns_rewrite | default(false)
+  changed_when: true
+
+- name: Riscrivi le zone DDNS da YAML (riscrittura forzata)
+  ansible.builtin.template:
+    src: zone.db.j2
+    dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0644"
+    force: true
+  loop: "{{ dns_zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.ddns_enabled | default(false)
+    - dns_force_ddns_rewrite | default(false)
+  vars:
+    zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
+    zone_serial_override: "{{ zone_serials[item.name] }}"
+
+- name: Thaw delle zone DDNS (ricarica il file e riabilita gli update dinamici)
+  ansible.builtin.command:
+    cmd: "rndc thaw {{ item.name }}"
+  loop: "{{ dns_zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.ddns_enabled | default(false)
+    - dns_force_ddns_rewrite | default(false)
+  changed_when: true
+
+- name: Verifica sintassi zone files
+  ansible.builtin.command:
+    cmd: "named-checkzone {{ item.name }} {{ bind_zones_dir }}/db.{{ item.name }}"
+  loop: "{{ dns_zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+
+# ============================================================
+# ZONE REVERSE AUTOMATICHE (da CIDR)
+# ============================================================
+
+- name: Calcola metadati zone reverse dal CIDR
+  ansible.builtin.set_fact:
+    reverse_zones_computed: "{{ reverse_zones_computed | default([]) + [rev | combine(lookup('template', 'reverse_meta.j2') | from_yaml)] }}"
+  loop: "{{ dns_reverse_zones | default([]) }}"
+  loop_control:
+    loop_var: rev
+
+- name: Genera zone reverse da YAML per ogni rete
+  ansible.builtin.template:
+    src: zone.reverse.db.j2
+    dest: "{{ bind_zones_dir }}/db.{{ rev.zone_name }}"
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0644"
+  loop: "{{ reverse_zones_computed | default([]) }}"
+  loop_control:
+    loop_var: rev
+  vars:
+    rev_ptr_records: "{{ lookup('template', 'reverse_ptr_collect.j2') | from_yaml }}"
+  notify: reload bind9
+
+- name: Verifica sintassi zone reverse
+  ansible.builtin.command:
+    cmd: "named-checkzone {{ rev.zone_name }} {{ bind_zones_dir }}/db.{{ rev.zone_name }}"
+  loop: "{{ reverse_zones_computed | default([]) }}"
+  loop_control:
+    loop_var: rev
+  changed_when: false

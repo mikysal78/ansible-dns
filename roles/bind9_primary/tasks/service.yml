@@ -1,0 +1,10 @@
+---
+# ============================================================
+# bind9_primary — Servizio
+# ============================================================
+
+- name: Assicura che bind9 sia abilitato e avviato
+  ansible.builtin.systemd:
+    name: bind9
+    enabled: true
+    state: started

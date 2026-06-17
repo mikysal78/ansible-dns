@@ -1,0 +1,15 @@
+---
+# ============================================================
+# bind9_primary — Opzioni globali named
+# Un cambiamento qui richiede il restart del servizio.
+# ============================================================
+
+- name: Deploy named.conf.options
+  ansible.builtin.template:
+    src: named.conf.options.j2
+    dest: "{{ bind_config_dir }}/named.conf.options"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+    validate: "named-checkconf %s"
+  notify: restart bind9

@@ -1,0 +1,33 @@
+---
+# ============================================================
+# bind9_primary — Installazione pacchetti e filesystem
+# ============================================================
+
+- name: Installa pacchetti BIND9
+  ansible.builtin.apt:
+    name: "{{ bind_packages }}"
+    state: present
+    update_cache: true
+
+- name: Crea directory per le zone
+  ansible.builtin.file:
+    path: "{{ bind_zones_dir }}"
+    state: directory
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0755"
+
+- name: Aggiungi l'utente BIND al gruppo adm (accesso a /var/log)
+  ansible.builtin.user:
+    name: "{{ bind_user }}"
+    groups: adm
+    append: true
+  notify: restart bind9
+
+- name: Crea directory log
+  ansible.builtin.file:
+    path: "{{ bind_log_dir }}"
+    state: directory
+    owner: "{{ bind_user }}"
+    group: "{{ bind_group }}"
+    mode: "0755"

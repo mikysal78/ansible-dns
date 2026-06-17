@@ -1,0 +1,22 @@
+---
+# ============================================================
+# bind9_primary — Chiavi TSIG / DDNS
+# ============================================================
+
+- name: Deploy TSIG key file
+  ansible.builtin.template:
+    src: tsig.key.j2
+    dest: "{{ bind_config_dir }}/tsig-axfr.key"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+  notify: reload bind9
+
+- name: Deploy DDNS key file
+  ansible.builtin.template:
+    src: ddns.key.j2
+    dest: "{{ bind_config_dir }}/ddns.key"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+  notify: reload bind9

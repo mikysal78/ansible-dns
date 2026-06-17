@@ -17,3 +17,13 @@ bind_notify: "yes"
 
 # Numero massimo di trasferimenti in uscita simultanei
 bind_transfers_out: 10
+
+# Riscrittura forzata delle zone DDNS dal file YAML.
+# Default false: le zone con ddns_enabled vengono solo "seedate" la prima volta
+# e i record sono poi gestiti dai client via nsupdate (il file su disco NON viene
+# sovrascritto, per non perdere gli aggiornamenti dinamici e non confliggere col
+# journal .jnl). Impostando questo flag a true (es. -e dns_force_ddns_rewrite=true)
+# la zona viene rigenerata da YAML con la sequenza rndc freeze -> scrittura -> thaw.
+# ATTENZIONE: i record dinamici tornano ai placeholder finché i client non si
+# ri-registrano.
+dns_force_ddns_rewrite: false
