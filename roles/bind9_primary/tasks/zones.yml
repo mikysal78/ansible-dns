@@ -81,7 +81,22 @@
     zone_serial_override: "{{ zone_cur_serial[item.name] }}"
   register: zone_render
 
-# Passata 2: SOLO per le zone i cui record sono cambiati, incrementa
+# Passata 2a: inizializza zone_serials col serial CORRENTE per ogni zona
+# statica, cambiata o meno. Così zone_serials è una mappa completa
+# ("serial scritto per ciascuna zona") e i consumer a valle
+# (es. verifica propagazione sui secondari in update-zones.yml) non
+# trovano mai una chiave indefinita per le zone non modificate.
+- name: Inizializza zone_serials col serial corrente (tutte le zone statiche)
+  ansible.builtin.set_fact:
+    zone_serials: >-
+      {{ zone_serials | default({}) | combine({
+        item.name: (zone_cur_serial[item.name] | int)
+      }) }}
+  loop: "{{ dns_zones | rejectattr('ddns_enabled', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Passata 2b: SOLO per le zone i cui record sono cambiati, incrementa
 # il serial (monotòno, mai sotto YYYYMMDD01) e riscrivi → reload.
 - name: Calcola nuovo serial per le zone modificate
   ansible.builtin.set_fact:

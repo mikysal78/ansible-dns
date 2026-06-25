@@ -1,0 +1,35 @@
+# ============================================================
+# RIEPILOGO VARIABILI VAULT (da aggiungere in coda a playbooks/site.yml)
+# ------------------------------------------------------------
+# Default: mostra solo nome + stato (definita / NON definita + lunghezza),
+#          NESSUN segreto in chiaro.
+# Con -e reveal_secrets=true mostra anche i VALORI in chiaro.
+#   ATTENZIONE: i valori finiscono nello stdout e nei log del terminale.
+#   Usalo solo su una shell fidata e non in CI.
+# ============================================================
+- name: Riepilogo variabili vault
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    reveal_secrets: false
+    vault_keys:
+      - vault_tsig_secret
+      - vault_ddns_secret
+      - vault_acme_email
+      - vault_grafana_admin_password
+      - vault_alertmanager_smtp_password
+      - vault_proxmox_token_secret
+  tasks:
+    - name: Stato delle variabili vault
+      ansible.builtin.debug:
+        msg: >-
+          {{ item }}:
+          {{ 'NON definita'
+             if (lookup('vars', item, default='') | string | length == 0)
+             else (lookup('vars', item)
+                   if (reveal_secrets | bool)
+                   else 'definita (' ~ (lookup('vars', item) | string | length) ~ ' char)') }}
+      loop: "{{ vault_keys }}"
+      loop_control:
+        label: "{{ item }}"

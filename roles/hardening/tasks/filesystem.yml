@@ -10,7 +10,7 @@
     path: /tmp
     src: tmpfs
     fstype: tmpfs
-    opts: "defaults,noexec,nosuid,nodev,size=512m"
+    opts: "defaults,noexec,nosuid,nodev,size=1024m"
     state: mounted
   when: hardening_tmp_noexec
 
@@ -28,7 +28,7 @@
     path: /dev/shm
     src: tmpfs
     fstype: tmpfs
-    opts: "defaults,noexec,nosuid,nodev,size=256m"
+    opts: "defaults,noexec,nosuid,nodev,size=1024m"
     state: mounted
   when: hardening_dev_shm_noexec
 

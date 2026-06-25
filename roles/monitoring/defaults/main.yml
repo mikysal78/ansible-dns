@@ -10,7 +10,7 @@ prometheus_version: "2.51.2"
 node_exporter_version: "1.8.0"
 bind_exporter_version: "0.7.0"
 alertmanager_version: "0.27.0"
-grafana_version: "13.0.2"
+grafana_version: "13.1.0"
 
 # --- Porte ---
 prometheus_port: 9090

@@ -5,7 +5,7 @@ include "{{ bind_config_dir }}/tsig-axfr.key";
 include "{{ bind_config_dir }}/ddns.key";
 
 acl "secondaries" {
-{% for ip in dns_secondary_ips %}
+{% for ip in dns_secondary_peer_ips %}
     {{ ip }};
 {% endfor %}
 };
@@ -31,9 +31,10 @@ options {
     allow-update        { key "{{ ddns_key_name }}"; };
 
     // Notifica i secondari ad ogni cambio zona
-    notify yes;
+    notify explicit;
+    notify-source {{ dns_primary_ip }};
     also-notify {
-{% for ip in dns_secondary_ips %}
+{% for ip in dns_secondary_peer_ips %}
         {{ ip }};
 {% endfor %}
     };

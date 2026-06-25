@@ -15,6 +15,20 @@ bind_querylog: "yes"
 # Abilita NOTIFY verso i secondari
 bind_notify: "yes"
 
+# Indirizzi dei secondari COSÌ COME LI VEDE IL PRIMARIO. Il primario è
+# dietro NAT e tutto (AXFR, NOTIFY, query SOA di refresh) passa sul
+# WireGuard, quindi i secondari contattano il primario dalla loro
+# interfaccia WG: questi IP servono sia per l'ACL allow-query sia per i
+# NOTIFY. Il primario è dietro NAT e gli AXFR passano
+# sul WireGuard: i secondari hanno `allow-notify { <ip-wg-primario>; }`,
+# quindi accettano i NOTIFY SOLO se arrivano dal canale WG. Qui usiamo
+# gli indirizzi WireGuard dei secondari (dall'inventory); se nessuno ha
+# wg_address, ripieghiamo sugli IP pubblici (comportamento precedente).
+dns_secondary_peer_ips: >-
+  {{ (groups['dns_secondary'] | default([])
+      | map('extract', hostvars, 'wg_address')
+      | select('defined') | list) or (dns_secondary_ips | default([])) }}
+
 # Numero massimo di trasferimenti in uscita simultanei
 bind_transfers_out: 10
 

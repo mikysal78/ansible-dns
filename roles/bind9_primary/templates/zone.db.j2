@@ -60,8 +60,15 @@ $TTL    {{ zone_data.zone.ttl | default(3600) }}
 {% endfor %}
 
 ; --- TXT ---
+{# Una character-string TXT puo' contenere max 255 byte (RFC 1035 3.3.14). #}
+{# I valori piu' lunghi (es. chiavi DKIM) vanno spezzati in piu' stringhe   #}
+{# tra parentesi: BIND concatena automaticamente le stringhe adiacenti.     #}
 {% for r in zone_data.zone.txt | default([]) %}
+{% if r.value | length > 255 %}
+{{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  TXT     ( {% for i in range(0, r.value | length, 255) %}"{{ r.value[i:i + 255] }}" {% endfor %})
+{% else %}
 {{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  TXT     "{{ r.value }}"
+{% endif %}
 {% endfor %}
 
 ; --- SRV ---

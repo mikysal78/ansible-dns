@@ -28,6 +28,25 @@
     # dagli update nsupdate dei client).
     static_forward_zones: "{{ dns_zones | rejectattr('ddns_enabled', 'equalto', true) | list }}"
 
+    # [Opzionale] Indirizzi WireGuard dei secondari, derivati dall'inventory
+    # (gli host del gruppo dns_secondary con wg_address). Servono a verificare
+    # la propagazione anche sul canale cifrato usato per gli AXFR, non solo
+    # sugli IP pubblici. Se nessun secondario ha wg_address la verifica WG
+    # viene semplicemente saltata.
+    dns_secondary_wg_ips: >-
+      {{ groups['dns_secondary'] | default([])
+         | map('extract', hostvars, 'wg_address')
+         | select('defined') | list }}
+    # Attiva la verifica WG se ci sono indirizzi WG. Disattivabile a runtime
+    # con:  -e dns_verify_wg=false
+    dns_verify_wg: "{{ (dns_secondary_wg_ips | length) > 0 }}"
+
+    # Finestra di attesa per la propagazione sui secondari. Se i secondari
+    # si aggiornano solo al refresh (NOTIFY assente), allarga questi valori,
+    # es.:  -e dns_verify_retries=20 -e dns_verify_delay=10
+    dns_verify_retries: 6
+    dns_verify_delay: 5
+
   tasks:
     - name: Esegui solo la parte 'zones' del ruolo bind9_primary
       ansible.builtin.import_role:
@@ -37,7 +56,92 @@
     - name: Applica i reload in sospeso prima della verifica
       ansible.builtin.meta: flush_handlers
 
-    - name: Verifica propagazione del serial sui secondari
+    # ------------------------------------------------------------
+    # Riferimento corretto per la verifica = il serial che il PRIMARIO
+    # serve davvero (riletto dopo i reload). I secondari vanno
+    # confrontati con questo, NON col valore che Ansible intendeva
+    # scrivere: così un eventuale reload mancato non genera falsi
+    # fallimenti e viene invece rilevato e corretto.
+    # ------------------------------------------------------------
+    - name: Leggi il serial servito dal primario
+      ansible.builtin.command:
+        cmd: "dig +short +time=5 SOA {{ item.name }} @127.0.0.1"
+      loop: "{{ static_forward_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: primary_soa
+      changed_when: false
+
+    - name: Costruisci mappa serial servito dal primario
+      ansible.builtin.set_fact:
+        primary_live_serial: >-
+          {{ primary_live_serial | default({}) | combine({
+            item.item.name: (item.stdout.split()[2]
+                             if (item.stdout.split() | length >= 3) else '0')
+          }) }}
+      loop: "{{ primary_soa.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    # Self-heal: se per qualche zona il primario non serve ancora il
+    # serial atteso (reload non scattato perché la riscrittura del file
+    # era un no-op), forza un rndc reload e rileggi. Rompe lo sfasamento
+    # file-su-disco / serial-in-RAM senza intervento manuale.
+    - name: Individua le zone in cui il primario è indietro
+      ansible.builtin.set_fact:
+        zones_primary_behind: "{{ (zones_primary_behind | default([])) + [item.name] }}"
+      loop: "{{ static_forward_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - zone_serials[item.name] is defined
+        - (primary_live_serial[item.name] | default('0') | string) != (zone_serials[item.name] | string)
+
+    - name: Self-heal — forza il reload di named se il primario è indietro
+      ansible.builtin.command:
+        cmd: rndc reload
+      changed_when: true
+      when: (zones_primary_behind | default([])) | length > 0
+
+    - name: Rileggi il serial servito dal primario dopo il self-heal
+      ansible.builtin.command:
+        cmd: "dig +short +time=5 SOA {{ item.name }} @127.0.0.1"
+      loop: "{{ static_forward_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: primary_soa_post
+      changed_when: false
+      when: (zones_primary_behind | default([])) | length > 0
+
+    - name: Aggiorna la mappa serial del primario (post self-heal)
+      ansible.builtin.set_fact:
+        primary_live_serial: >-
+          {{ primary_live_serial | combine({
+            item.item.name: (item.stdout.split()[2]
+                             if (item.stdout.split() | length >= 3) else '0')
+          }) }}
+      loop: "{{ primary_soa_post.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: item.stdout is defined
+
+    - name: Avviso se il primario non serve il serial atteso (problema di reload)
+      ansible.builtin.debug:
+        msg: >-
+          ATTENZIONE {{ item.name }}: atteso {{ zone_serials[item.name] }},
+          il primario serve {{ primary_live_serial[item.name] | default('?') }}.
+          Controlla l'handler 'reload bind9' o lo stato di named.
+      loop: "{{ static_forward_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - zone_serials[item.name] is defined
+        - (primary_live_serial[item.name] | default('0') | string) != (zone_serials[item.name] | string)
+
+    # ------------------------------------------------------------
+    # I secondari devono servire lo STESSO serial del primario.
+    # ------------------------------------------------------------
+    - name: Verifica che i secondari servano il serial del primario
       ansible.builtin.command:
         cmd: "dig +short +time=5 SOA {{ item.0.name }} @{{ item.1 }}"
       loop: "{{ static_forward_zones | product(dns_secondary_ips) | list }}"
@@ -45,25 +149,61 @@
         label: "{{ item.0.name }} @ {{ item.1 }}"
       register: secondary_verify
       changed_when: false
-      retries: 6
-      delay: 5
-      until: (zone_serials[item.0.name] | string) in (secondary_verify.stdout | default(''))
+      retries: "{{ dns_verify_retries }}"
+      delay: "{{ dns_verify_delay }}"
+      until: >-
+        (primary_live_serial[item.0.name] | default('') | string)
+        in (secondary_verify.stdout | default(''))
+      # Consultivo: un ritardo di propagazione non aborta il deploy.
       failed_when: false
+      ignore_errors: true
 
     - name: Report propagazione sui secondari
       ansible.builtin.debug:
         msg: >-
           {{ item.item.0.name }} @{{ item.item.1 }}:
-          {{ ('OK serial=' ~ zone_serials[item.item.0.name])
-             if (zone_serials[item.item.0.name] | string) in (item.stdout | default(''))
+          {{ ('OK serial=' ~ (primary_live_serial[item.item.0.name] | default('?')))
+             if (primary_live_serial[item.item.0.name] | default('') | string) in (item.stdout | default(''))
              else ('NON ancora propagato (' ~ (item.stdout | default('timeout') | trim) ~ ')') }}
       loop: "{{ secondary_verify.results | default([]) }}"
       loop_control:
         label: "{{ item.item.0.name }}"
 
-    - name: Riepilogo serial zone dirette
+    # ------------------------------------------------------------
+    # [Opzionale] Stessa verifica sul canale WireGuard (vedi vars).
+    # ------------------------------------------------------------
+    - name: Verifica che i secondari servano il serial del primario (canale WireGuard)
+      ansible.builtin.command:
+        cmd: "dig +short +time=5 -b {{ dns_primary_ip }} SOA {{ item.0.name }} @{{ item.1 }}"
+      loop: "{{ static_forward_zones | product(dns_secondary_wg_ips) | list }}"
+      loop_control:
+        label: "{{ item.0.name }} @ {{ item.1 }} (wg)"
+      register: secondary_verify_wg
+      changed_when: false
+      retries: "{{ dns_verify_retries }}"
+      delay: "{{ dns_verify_delay }}"
+      until: >-
+        (primary_live_serial[item.0.name] | default('') | string)
+        in (secondary_verify_wg.stdout | default(''))
+      failed_when: false
+      ignore_errors: true
+      when: dns_verify_wg | bool
+
+    - name: Report propagazione sui secondari (canale WireGuard)
       ansible.builtin.debug:
-        msg: "{{ item.name }} -> serial {{ zone_serials[item.name] }}"
+        msg: >-
+          {{ item.item.0.name }} @{{ item.item.1 }} (wg):
+          {{ ('OK serial=' ~ (primary_live_serial[item.item.0.name] | default('?')))
+             if (primary_live_serial[item.item.0.name] | default('') | string) in (item.stdout | default(''))
+             else ('NON ancora propagato (' ~ (item.stdout | default('timeout') | trim) ~ ')') }}
+      loop: "{{ secondary_verify_wg.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.0.name }}"
+      when: dns_verify_wg | bool
+
+    - name: Riepilogo serial zone dirette (servito dal primario)
+      ansible.builtin.debug:
+        msg: "{{ item.name }} -> serial {{ primary_live_serial[item.name] | default('?') }}"
       loop: "{{ static_forward_zones }}"
       loop_control:
         label: "{{ item.name }}"
