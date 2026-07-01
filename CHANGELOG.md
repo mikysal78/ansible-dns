@@ -6,6 +6,25 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.7.0] — 2026-07-01
+
+### Aggiunto
+- **Migrazione DNSSEC alg 15 → alg 13**: cambiato algoritmo da Ed25519 (alg 15, non supportato da OVH) a ecdsap256sha256 (alg 13, OVH supporta alg 8-14). Variabili `dnssec_algorithm`, `dnssec_ksk_algorithm`, `dnssec_zsk_algorithm` aggiornate nei defaults del role `dnssec`.
+- `dnssec_force_regen`: flag per reset completo chiavi/journal DNSSEC durante migrazioni algoritmo (stop bind9 → rm K* + *.jnl + *.signed → start bind9 → rndc sign).
+- `playbooks/dnssec-deploy.yml`: playbook dedicato al role `dnssec` (il tag `--tags dnssec` su `site.yml` non è sufficiente per il force_regen).
+- `playbooks/dnssec-repair-keytag.yml`: rinomina i file K* al keytag corretto (workaround bug BIND con alg 15 dove il keytag nel filename non corrisponde a quello calcolato).
+- `playbooks/dnssec-diag.yml`: playbook diagnostico (chiavi attive, seriali raw/signed, ultimi log BIND, rndc notify).
+- `playbooks/fix-ninux-delegation.yml`: aggiunge la delegation `dyn.ninux-nnxx.it` (NS + DS) al parent zone con la sequenza `rndc freeze → template → rndc thaw`, senza toccare `dyn.ninux-nnxx.it` (zona DDNS con record dinamici).
+- `dnssec-ovh.txt`: riepilogo DS record e chiavi pubbliche DNSKEY per la registrazione su OVH (ninux-nnxx.it, romaclubmatera.it, dyn.ninux-nnxx.it).
+- `zone.db.j2`: sezione delegazioni sottozone — renderizza record NS + DS dalla chiave `delegations` del file YAML di zona.
+- `Makefile`: variabile `EXTRA` per passare parametri extra ad ansible-playbook; nuovi target `dnssec-deploy`, `dnssec-repair`, `fix-delegation`.
+
+### Corretto
+- `bind9_primary/templates/named.conf.local.j2`: aggiunge `dnssec-policy` e `inline-signing yes` per ogni zona, usando `bind_dnssec_policy` e `bind_dnssec_key_directory` dai defaults. Impediva la perdita della firma DNSSEC dopo ogni esecuzione di `update-zones.yml`.
+- `bind9_primary/tasks/zones.yml`: aggiunti `| bool` ai `when: dns_force_ddns_rewrite` (Ansible passava una stringa invece di booleano con `-e var=true`); rimosso `validate: named-checkconf` da `named.conf.local` (la `dnssec-policy` è definita in `named.conf.options`, non visibile alla validazione standalone).
+- `dnssec/tasks/main.yml`: aggiunto `| bool` al `when: dnssec_force_regen` per lo stesso motivo.
+- `bind_transfers_out`: aggiunto ai defaults del role `dnssec` (era definito solo in `bind9_primary`, causava errore "undefined" nel template `named.conf.options-dnssec.j2`).
+
 ## [1.6.0] — 2026-07-01
 
 ### Aggiunto
