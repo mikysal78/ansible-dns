@@ -21,4 +21,5 @@
         comment: "acme-deploy@ns-primary"
         state: present
 
-- ansible.builtin.import_playbook: cert-deploy.yml
+- name: Copia certificati dal primary ai CT consumer
+  ansible.builtin.import_playbook: cert-deploy.yml

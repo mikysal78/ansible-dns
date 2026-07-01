@@ -56,12 +56,13 @@
 # Estrai e mostra i DS record da pubblicare presso il registrar
 - name: Genera DS records per ogni zona
   ansible.builtin.shell:
-    cmd: >
-      dnssec-dsfromkey -a SHA-256
-      $(ls {{ dnssec_key_directory }}/K{{ item.name }}*.key 2>/dev/null | head -1)
+    cmd: |
+      set -o pipefail
+      ksk=$(grep -rl 'DNSKEY 257' {{ dnssec_key_directory }}/ 2>/dev/null | grep "K{{ item.name }}" | head -1)
+      [ -n "$ksk" ] && dnssec-dsfromkey -a SHA-256 "$ksk" || true
     executable: /bin/bash
   register: ds_records
-  loop: "{{ dns_zones | selectattr('ddns_enabled', 'equalto', false) | list }}"
+  loop: "{{ dns_zones }}"
   changed_when: false
   failed_when: false
   when: dnssec_print_ds

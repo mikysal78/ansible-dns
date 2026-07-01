@@ -19,9 +19,9 @@
     state: restarted
 
 - name: restart auditd
-  ansible.builtin.command:
-    cmd: service auditd restart
-  changed_when: true
+  ansible.builtin.service:
+    name: auditd
+    state: restarted
 
 - name: reload postfix
   ansible.builtin.systemd:

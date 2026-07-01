@@ -71,4 +71,7 @@
     regexp: "^#?Storage="
     line: "Storage=none"
     create: true
+    owner: root
+    group: root
+    mode: "0644"
   notify: reload systemd

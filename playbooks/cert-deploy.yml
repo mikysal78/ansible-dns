@@ -56,4 +56,5 @@
 
   handlers:
     - name: reload service
-      ansible.builtin.shell: "{{ cert_reload_cmd }}"
+      ansible.builtin.shell: "{{ cert_reload_cmd }}" # noqa: command-instead-of-shell no-changed-when
+      changed_when: true

@@ -39,8 +39,8 @@
     - name: DS Records dalle KSK (flag 257) — da pubblicare al registrar
       ansible.builtin.shell:
         cmd: |
-          # Trova tutte le KSK (flag 257) per la zona e calcola il DS record SHA-256
-          ksk=$(grep -l 'DNSKEY 257' /var/lib/bind/keys/K{{ item.name }}.+*.key 2>/dev/null | head -1)
+          set -o pipefail
+          ksk=$(grep -rl 'DNSKEY 257' /var/lib/bind/keys/ 2>/dev/null | grep "K{{ item.name }}" | head -1)
           if [ -n "$ksk" ]; then
             dnssec-dsfromkey -a SHA-256 "$ksk"
           else
