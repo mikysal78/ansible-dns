@@ -7,7 +7,7 @@
 [![BIND9](https://img.shields.io/badge/BIND-9.20-blue)](https://www.isc.org/bind/)
 [![Proxmox](https://img.shields.io/badge/Proxmox-VE-orange)](https://www.proxmox.com/)
 
-Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready** con hidden primary su Proxmox VE, N secondari pubblici su VPS, DNSSEC inline signing, hardening OS, firewall nftables, certificati ACME wildcard, DDNS per router OpenWrt e monitoring con Prometheus/Grafana.
+Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready** con hidden primary su Proxmox VE, N secondari pubblici su VPS, DNSSEC inline signing, hardening OS, firewall nftables, certificati ACME wildcard con deploy automatico ai CT Proxmox, DDNS per router OpenWrt e monitoring con Prometheus/Grafana.
 
 ---
 
@@ -17,6 +17,7 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - [Funzionalità](#funzionalità)
 - [Prerequisiti](#prerequisiti)
 - [Struttura del progetto](#struttura-del-progetto)
+- [Makefile — comandi rapidi](#makefile--comandi-rapidi)
 - [Proxmox — Provisioning VM](#proxmox--provisioning-vm)
 - [OVH — VM secondarie](#ovh--vm-secondarie)
 - [Setup iniziale](#setup-iniziale)
@@ -120,9 +121,11 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - Configurazione UCI automatizzata via Ansible
 
 ### Certificati ACME
-- **acme.sh** con DNS-01 challenge via `nsupdate`
-- Certificati **wildcard** `*.example.com` + root
-- Rinnovo automatico via cron
+- **acme.sh** con DNS-01 challenge via `nsupdate` (plugin ufficiale `dns_nsupdate`, RFC 2136)
+- Certificati **wildcard** `*.example.com` + root, versione acme.sh pinned
+- Rinnovo automatico via cron (02:30 ogni notte)
+- **Deploy automatico ai CT Proxmox**: il primary genera una chiave SSH ed25519 dedicata, la distribuisce ai CT consumer e copia i certificati rinnovati via rsync (porta configurabile)
+- Deploy **best-effort**: se un CT è irraggiungibile, il rinnovo sul primary non fallisce
 
 ### Hardening OS
 - SSH con cifrari moderni (chacha20, AES-GCM, curve25519)
@@ -254,13 +257,16 @@ ansible-dns/
 │   ├── ddns_openwrt/
 │   └── monitoring/
 │
+├── Makefile                           # comandi rapidi (deploy, zones, acme, ...)
 ├── playbooks/
-│   ├── proxmox.yml                    # ← NUOVO: provisioning VM primary
-│   ├── proxmox-prepare-template.yml   # ← NUOVO: crea template Debian Trixie
-│   ├── proxmox-snapshot.yml           # ← NUOVO: gestione snapshot
+│   ├── proxmox.yml                    # provisioning VM primary
+│   ├── proxmox-prepare-template.yml   # crea template Debian Trixie
+│   ├── proxmox-snapshot.yml           # gestione snapshot
 │   ├── site.yml                       # deploy DNS completo
 │   ├── update-zones.yml               # aggiorna zone con serial auto
-│   ├── renew-certs.yml
+│   ├── acme-only.yml                  # emissione cert + deploy ai CT
+│   ├── cert-deploy.yml                # copia cert dal primary ai CT (via control node)
+│   ├── renew-certs.yml                # rinnovo manuale forzato
 │   └── dnssec-status.yml
 │
 ├── molecule/
@@ -270,6 +276,31 @@ ansible-dns/
     └── workflows/
         ├── ci.yml
         └── release.yml
+```
+
+---
+
+## Makefile — comandi rapidi
+
+Il `Makefile` alla radice del progetto evita di ricordare i path dei playbook.
+
+```bash
+make deploy        # deploy completo (site.yml)
+make zones         # aggiorna solo le zone DNS
+make acme          # emetti/rinnova cert e distribuiscili ai CT
+make cert-deploy   # ricopia cert esistenti ai CT (senza re-emettere)
+make renew         # rinnovo manuale forzato certificati ACME
+make dnssec        # stato DNSSEC e prossime rotazioni chiavi
+make vault-summary # riepilogo variabili vault
+make ping          # verifica connettività a tutti gli host
+make syntax        # syntax check di site.yml
+make snapshot      # snapshot Proxmox del CT primary
+```
+
+Di default usa `--ask-vault-pass`. Per un file password:
+
+```bash
+make deploy VAULT="--vault-password-file=/git/.vault_pass"
 ```
 
 ---
@@ -687,20 +718,25 @@ ansible-playbook playbooks/site.yml --tags hardening --ask-vault-pass
 ansible-playbook playbooks/site.yml --check --diff --ask-vault-pass
 ```
 
-### Riepilogo variabili vault a fine deploy
+### Riepilogo a fine deploy
 
-`site.yml` termina con una play che stampa le variabili del vault
-(`vault_tsig_secret`, `vault_ddns_secret`, ecc.). Poiché il deploy gira su
-shell fidata, i valori sono mostrati **in chiaro** per verifica rapida.
+`site.yml` termina con un play di riepilogo che mostra:
+
+- **INFRASTRUTTURA** — IP primary, NS1/NS2 pubblici, indirizzi WireGuard
+- **ZONE DNS** — zone attive con tipo e stato DDNS
+- **MONITORING** — URL Grafana/Prometheus/Alertmanager con credenziali e comando SSH tunnel pronto per il notebook
+- **MONITORING SMTP** — stato notifiche email/webhook
+- **CERTIFICATI ACME** — file per dominio e CT destinatari
+- **CT CONSUMER** — elenco CT con cert e reload command
+- **VAULT** — valori delle variabili cifrate
 
 ```bash
-# nasconde i valori, mostra solo nome + stato (definita / NON definita)
+# nasconde i valori sensibili (utile su shell condivise o in CI)
 ansible-playbook playbooks/site.yml --ask-vault-pass -e reveal_secrets=false
 ```
 
-> ⚠️ I valori in chiaro finiscono nello stdout e nei log del terminale: non
-> eseguire `site.yml` con l'output di default su shell condivise o in CI.
-> Per ispezionare il vault cifrato senza eseguire il playbook:
+> ⚠️ Con `reveal_secrets=true` (default) le password appaiono in chiaro nello stdout.
+> Non eseguire con output visibile ad altri. Per ispezionare il vault:
 > `ansible-vault view inventory/group_vars/all/vault.yml`.
 
 ### Ordine roles in `site.yml`
@@ -878,23 +914,31 @@ Lo script rileva automaticamente CGNAT e ottiene l'IP pubblico reale.
 
 ### Accesso via SSH tunnel
 
-Grafana, Prometheus e Alertmanager ascoltano solo su `127.0.0.1` del primary.
-Il role hardening abilita `PermitOpen` solo per le porte di monitoraggio, così
-il forwarding è ristretto a queste e nient'altro.
+Grafana, Prometheus e Alertmanager ascoltano solo su `127.0.0.1` del primary (IP privato LAN, non esposto su internet). Il role hardening abilita `PermitOpen` solo per le porte di monitoraggio.
 
 ```bash
-ssh -p 2400 \
-    -L 9090:127.0.0.1:9090 \
+# Apri il tunnel dal tuo notebook (rimane in background con -N)
+ssh -p 2400 -N \
     -L 3000:127.0.0.1:3000 \
+    -L 9090:127.0.0.1:9090 \
     -L 9093:127.0.0.1:9093 \
-    root@10.0.0.14
+    root@<primary-ip>
 
-# Grafana:      http://localhost:3000
+# Grafana:      http://localhost:3000   (admin / vault_grafana_admin_password)
 # Prometheus:   http://localhost:9090
 # Alertmanager: http://localhost:9093
 ```
 
-> Login Grafana: utente `admin`, password dal vault (`vault_grafana_admin_password`).
+Il comando SSH tunnel preciso (con IP reale) viene stampato a fine di ogni `make deploy` nella sezione **MONITORING — accesso**.
+
+> Se il primary non è raggiungibile direttamente dal notebook, fai il jump via Proxmox:
+> ```bash
+> ssh -J root@<proxmox-ip> -p 2400 -N \
+>     -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 9093:127.0.0.1:9093 \
+>     root@<primary-ip>
+> ```
+
+> **Firewall**: se non riesci a connetterti anche con il tunnel aperto, aggiungi il tuo IP a `monitoring_allowed_sources` in `group_vars/all/main.yml` e rilancia `make deploy`.
 
 ### Alert preconfigurati
 
@@ -981,16 +1025,77 @@ nft list ruleset
 
 ## Certificati ACME
 
-```bash
-# Rinnovo manuale
-ansible-playbook playbooks/renew-certs.yml --ask-vault-pass
+### Come funziona
 
-# Aggiungere dominio: roles/acme_dns/defaults/main.yml
+1. acme.sh sul primary ottiene i certificati wildcard (`*.example.com` + root) via DNS-01 challenge usando `nsupdate` con la TSIG key `ddns-key`
+2. Al rinnovo (cron 02:30) o al primo deploy, il primary copia i certificati ai CT consumer via SSH (chiave ed25519 dedicata)
+3. Dopo la copia, il CT esegue il `reload_cmd` configurato (nginx, postfix, dovecot…)
+
+### Configurare i domini e i CT destinatari
+
+```yaml
+# inventory/group_vars/all/main.yml
+acme_deploy_key: "/root/.ssh/acme_deploy_id_ed25519"
+acme_deploy_ssh_port: 2400   # porta SSH dei CT
+
 acme_domains:
   - domain: "example.com"
     keylength: "ec-256"
+    deploy:
+      - host: "10.0.0.16"          # CT nginx
+        reload_cmd: "systemctl reload nginx"
   - domain: "altro.com"
     keylength: "ec-256"
+    deploy:
+      - host: "10.0.0.6"           # CT mail
+        reload_cmd: "systemctl reload postfix && systemctl reload dovecot"
+```
+
+```yaml
+# inventory/hosts.yml — gruppo cert_consumers
+cert_consumers:
+  hosts:
+    ct-web:
+      ansible_host: 10.0.0.16
+      ansible_user: root
+      ansible_port: 2400
+      cert_domain: "example.com"
+      cert_reload_cmd: "systemctl reload nginx"
+    ct-mail:
+      ansible_host: 10.0.0.6
+      ansible_user: root
+      ansible_port: 2400
+      cert_domain: "altro.com"
+      cert_reload_cmd: "systemctl reload postfix && systemctl reload dovecot"
+```
+
+### Comandi
+
+```bash
+# Emette/rinnova cert E distribuisce ai CT (tutto in una run)
+make acme
+
+# Ricopia solo i cert già emessi ai CT (senza re-emettere)
+make cert-deploy
+
+# Rinnovo manuale forzato
+make renew
+
+# Controlla i log di rinnovo automatico sul primary
+ssh -p 2400 root@<primary-ip> "tail -50 /var/log/acme-renew.log"
+```
+
+### Troubleshooting
+
+```bash
+# Forza rinnovo manuale di un singolo dominio
+ssh -p 2400 root@<primary-ip> \
+  "/opt/acme.sh/acme.sh --renew -d example.com --force --home /opt/acme.sh"
+
+# Verifica che i cert siano arrivati sul CT
+ssh -p 2400 root@<ct-ip> "ls -la /etc/ssl/acme/"
+ssh -p 2400 root@<ct-ip> \
+  "openssl x509 -noout -subject -enddate -in /etc/ssl/acme/example.com.fullchain.pem"
 ```
 
 ---
@@ -1025,6 +1130,25 @@ molecule test
 ## Operazioni giornaliere
 
 ```bash
+# Aggiorna zone DNS
+make zones
+
+# Stato DNSSEC + DS records
+make dnssec
+
+# Snapshot prima di un'operazione rischiosa
+make snapshot
+
+# Ricopia certificati ai CT (dopo un rinnovo manuale o una nuova VM)
+make cert-deploy
+
+# Verifica connettività a tutti gli host
+make ping
+```
+
+Comandi diretti utili:
+
+```bash
 # Stato BIND su tutti i nodi
 ansible all -m command -a "systemctl status bind9" --ask-vault-pass
 
@@ -1040,10 +1164,10 @@ ansible dns_secondary -m command \
 ansible dns_secondary -m command \
   -a "nft list set inet filter dns_flood" --ask-vault-pass
 
-# Stato DNSSEC + DS records
-ansible-playbook playbooks/dnssec-status.yml --ask-vault-pass
+# Log rinnovo certificati
+ssh -p 2400 root@<primary-ip> "tail -50 /var/log/acme-renew.log"
 
-# Snapshot prima di un'operazione rischiosa
+# Snapshot con nome personalizzato
 ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=create snap_name=pre-manutenzione"
 ```
