@@ -860,26 +860,63 @@ BIND 9.20 con `dnssec-policy` gestisce tutto:
 | NSEC3 iterations | 0 | RFC 9276 |
 | Signature validity | 14 giorni | Rinnovo 3gg prima |
 
-### Pubblicazione DS record
+### DS record — cosa sono e dove vanno
+
+Il **DS record** (Delegation Signer) è un hash della tua KSK (Key Signing Key). Va inserito nel **pannello del registrar** dove hai registrato il dominio (Aruba, Register.it, Namecheap, ecc.) nella sezione "DNSSEC" o "DS Records". Crea la **chain of trust**: senza di esso DNSSEC è configurato ma non verificabile dai resolver pubblici.
+
+> **Eccezione**: le zone subdomain (es. `dyn.example.com`) non vanno al registrar. Il loro DS record è gestito automaticamente da BIND nella zona padre (`example.com`).
+
+### Come ottenere i DS record
 
 ```bash
-ansible-playbook playbooks/dnssec-status.yml --ask-vault-pass
-# Output: DS record da incollare nel pannello del registrar
+make dnssec
 ```
 
-### Verifica
+Il playbook stampa per ogni zona:
+
+```
+ninux-nnxx.it. IN DS 24729 15 2 B73CAF4FE07BE64E...
+```
+
+I campi da inserire al registrar sono:
+
+| Campo registrar | Dove trovarlo nell'output |
+|---|---|
+| **Key Tag** (o Key ID) | primo numero dopo `DS` — es. `24729` |
+| **Algorithm** | secondo numero — `15` = Ed25519 |
+| **Digest Type** | terzo numero — `2` = SHA-256 |
+| **Digest** | stringa esadecimale finale |
+
+### Inserimento al registrar
+
+Ogni registrar ha un'interfaccia diversa, ma i campi sono sempre gli stessi. Esempio per un dominio con algoritmo Ed25519:
+
+| Campo | Valore esempio |
+|---|---|
+| Key Tag | `24729` |
+| Algorithm | `15` |
+| Digest Type | `2` |
+| Digest | `B73CAF4FE07BE64E29EB7A57ABBC791D757CC5B8B0790B4DCE532352765EF729` |
+
+La propagazione richiede in genere 1–24 ore (dipende dal TTL del registro TLD).
+
+### Verifica chain of trust
 
 ```bash
-# Firma locale
+# Chain of trust end-to-end (dopo propagazione DS al registrar)
+delv @8.8.8.8 example.com SOA +rtrace
+# Output atteso: "; fully validated"
+
+# Firma locale (senza aspettare la propagazione)
 dig +dnssec example.com SOA @ns1.example.com
 
-# Chain of trust end-to-end
-delv @8.8.8.8 example.com SOA +rtrace
-
-# Stato DNSSEC
-ansible dns_primary -m command \
-  -a "rndc dnssec -status example.com" --ask-vault-pass
+# Stato chiavi DNSSEC e prossime rotazioni
+make dnssec
 ```
+
+### Rotazione chiavi (automatica)
+
+BIND ruota KSK e ZSK automaticamente secondo la policy. Quando avviene una **rotazione KSK** devi aggiornare il DS record al registrar con il nuovo Key Tag. Il playbook `make dnssec` mostra sempre il DS record attivo da pubblicare.
 
 ---
 
