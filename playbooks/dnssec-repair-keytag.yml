@@ -1,0 +1,78 @@
+---
+# ============================================================
+# PLAYBOOK — Ripara il key tag nei filename delle chiavi DNSSEC
+#
+# Bug noto BIND: con alg 15 (Ed25519) il key tag nel filename
+# viene scritto in modo errato rispetto al tag reale calcolato
+# dai dati della chiave.
+#
+# Questo playbook rinomina i file K*.key / K*.private usando
+# il key tag corretto (quello che OVH/registrar vede nel DS record).
+#
+# Uso: ansible-playbook playbooks/dnssec-repair-keytag.yml --ask-vault-pass
+# ============================================================
+
+- name: Ripara key tag nei filename chiavi DNSSEC
+  hosts: dns_primary
+  become: true
+
+  vars:
+    dnssec_key_directory: "/var/lib/bind/keys"
+
+  tasks:
+    - name: Trova file .key DNSSEC
+      ansible.builtin.find:
+        paths: "{{ dnssec_key_directory }}"
+        patterns: "K*.key"
+      register: key_files
+
+    - name: Calcola key tag reale e rinomina se diverge dal filename
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          keyfile="{{ item.path }}"
+          # Key tag reale dal DS record (campo 4)
+          real_tag=$(dnssec-dsfromkey -a SHA-256 "$keyfile" 2>/dev/null | awk 'NR==1{print $4}')
+          [ -z "$real_tag" ] && echo "SKIP: impossibile calcolare tag per $keyfile" && exit 0
+
+          padded=$(printf '%05d' "$real_tag")
+          # Tag nel filename (numero tra il secondo + e .key)
+          file_tag=$(basename "$keyfile" | grep -oP '(?<=\+)\d+(?=\.key)')
+
+          if [ "$file_tag" = "$padded" ]; then
+            echo "OK: $keyfile (tag $padded già corretto)"
+          else
+            base=$(echo "$keyfile" | sed "s/+${file_tag}\.key//")
+            mv "$keyfile" "${base}+${padded}.key"
+            [ -f "${base}+${file_tag}.private" ] && mv "${base}+${file_tag}.private" "${base}+${padded}.private"
+            echo "RINOMINATO: +${file_tag} → +${padded}"
+          fi
+        executable: /bin/bash
+      loop: "{{ key_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: rename_result
+      changed_when: "'RINOMINATO' in rename_result.stdout"
+
+    - name: Risultato rinomina
+      ansible.builtin.debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ rename_result.results }}"
+      loop_control:
+        label: "{{ item.item.path | basename }}"
+
+    - name: Ricarica BIND (applica le chiavi rinominate)
+      ansible.builtin.systemd:
+        name: bind9
+        state: reloaded
+      when: rename_result.results | selectattr('changed') | list | length > 0
+
+    - name: Verifica assenza errori keytag nel log BIND
+      ansible.builtin.command:
+        cmd: journalctl -u bind9 -n 20 --no-pager
+      register: bind_log
+      changed_when: false
+
+    - name: Log BIND (ultimi 20 righe)
+      ansible.builtin.debug:
+        var: bind_log.stdout_lines

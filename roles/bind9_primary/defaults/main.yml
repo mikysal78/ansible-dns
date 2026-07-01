@@ -1,5 +1,10 @@
 ---
 # Defaults per il role bind9_primary
+
+# DNSSEC inline signing: impostare uguale a dnssec_policy_name del role dnssec.
+# Lasciare vuoto per disabilitare DNSSEC nelle dichiarazioni di zona.
+bind_dnssec_policy: "dns-infra-policy"
+bind_dnssec_key_directory: "/var/lib/bind/keys"
 bind_packages:
   - bind9
   - bind9utils

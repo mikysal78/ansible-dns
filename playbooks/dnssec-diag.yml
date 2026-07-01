@@ -1,0 +1,65 @@
+---
+- name: Diagnostica DNSSEC — chiavi, zona, trasferimenti
+  hosts: dns_primary
+  become: true
+
+  tasks:
+    - name: Chiavi presenti in /var/lib/bind/keys
+      ansible.builtin.find:
+        paths: /var/lib/bind/keys
+        patterns: "K*.key"
+      register: keys
+
+    - name: Lista file chiavi
+      ansible.builtin.debug:
+        msg: "{{ keys.files | map(attribute='path') | map('basename') | list }}"
+
+    - name: Algoritmo e flag di ogni chiave
+      ansible.builtin.shell:
+        cmd: grep -h 'DNSKEY' /var/lib/bind/keys/K*.key 2>/dev/null | awk '{print "flag="$1, "alg="$4, "key="substr($5,1,20)"..."}'
+        executable: /bin/bash
+      register: key_info
+      changed_when: false
+      failed_when: false
+
+    - name: Info chiavi
+      ansible.builtin.debug:
+        var: key_info.stdout_lines
+
+    - name: Serial corrente delle zone
+      ansible.builtin.shell:
+        cmd: |
+          for zone in {{ dns_zones | map(attribute='name') | join(' ') }}; do
+            echo -n "$zone serial: "
+            rndc zonestatus "$zone" 2>/dev/null | grep -i serial || echo "N/A"
+          done
+        executable: /bin/bash
+      register: zone_serials
+      changed_when: false
+      failed_when: false
+
+    - name: Serial zone
+      ansible.builtin.debug:
+        var: zone_serials.stdout_lines
+
+    - name: Log BIND ultima ora (sign/notify/transfer/error)
+      ansible.builtin.shell:
+        cmd: journalctl -u bind9 --since "1 hour ago" --no-pager | grep -iE 'sign|notify|transfer|error|warn|refused' | tail -30
+        executable: /bin/bash
+      register: bind_log
+      changed_when: false
+      failed_when: false
+
+    - name: Log BIND
+      ansible.builtin.debug:
+        var: bind_log.stdout_lines
+
+    - name: Forza re-sign e notify ai secondari
+      ansible.builtin.shell:
+        cmd: |
+          rndc sign {{ item.name }}
+          rndc notify {{ item.name }}
+        executable: /bin/bash
+      loop: "{{ dns_zones }}"
+      changed_when: true
+      failed_when: false

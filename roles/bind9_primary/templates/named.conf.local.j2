@@ -14,6 +14,11 @@ zone "{{ zone.name }}" {
 {% endfor %}
     };
 
+{% if bind_dnssec_policy | default('') != '' %}
+    dnssec-policy "{{ bind_dnssec_policy }}";
+    key-directory "{{ bind_dnssec_key_directory | default('/var/lib/bind/keys') }}";
+    inline-signing yes;
+{% endif %}
 {% if zone.ddns_enabled | default(false) %}
     // Zona DDNS: aggiornamenti dinamici autorizzati con chiave
     allow-update { key "{{ ddns_key_name }}"; };

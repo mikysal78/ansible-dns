@@ -1,0 +1,86 @@
+---
+# ============================================================
+# Aggiunge la delegation dyn.ninux-nnxx.it (NS + DS) alla zona
+# padre ninux-nnxx.it senza toccare dyn.ninux-nnxx.it (DDNS).
+#
+# ninux-nnxx.it ha ddns_enabled:true (per acme.sh), quindi il
+# normale update-zones non la riscrive. Questo playbook fa:
+#   rndc freeze -> template con serial incrementato -> rndc thaw
+# I record dinamici persi (solo _acme-challenge.* temporanei)
+# verranno ri-aggiunti da acme.sh al prossimo rinnovo.
+#
+# Uso:
+#   ansible-playbook playbooks/fix-ninux-delegation.yml --ask-vault-pass
+# ============================================================
+
+- name: Aggiorna ninux-nnxx.it con delegation dyn (freeze/thaw)
+  hosts: dns_primary
+  become: true
+  gather_facts: true
+
+  vars:
+    target_zone: "ninux-nnxx.it"
+    zone_file_src: "zones/ninux-nnxx.it.yml"
+
+  tasks:
+    - name: Ottieni serial corrente di {{ target_zone }}
+      ansible.builtin.command:
+        cmd: "dig +short @127.0.0.1 SOA {{ target_zone }}"
+      register: cur_soa
+      changed_when: false
+
+    - name: Calcola nuovo serial (max tra corrente+1 e YYYYMMDD01)
+      ansible.builtin.set_fact:
+        new_serial: >-
+          {{ [ (cur_soa.stdout.split()[2] | default('0') | int) + 1,
+               ((ansible_facts.date_time.date | replace('-', '')) ~ '00') | int + 1
+             ] | max }}
+        zone_data: "{{ lookup('file', playbook_dir + '/../' + zone_file_src) | from_yaml }}"
+
+    - name: Debug — serial che verrà scritto
+      ansible.builtin.debug:
+        msg: "Serial corrente: {{ cur_soa.stdout.split()[2] | default('?') }}  →  nuovo: {{ new_serial }}"
+
+    - name: Freeze {{ target_zone }} (salva journal su file, blocca DDNS)
+      ansible.builtin.command:
+        cmd: "rndc freeze {{ target_zone }}"
+      changed_when: true
+
+    - name: Scrivi zona con delegation dyn e serial incrementato
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/bind9_primary/templates/zone.db.j2"
+        dest: "{{ bind_zones_dir }}/db.{{ target_zone }}"
+        owner: "{{ bind_user }}"
+        group: "{{ bind_group }}"
+        mode: "0644"
+      vars:
+        zone_serial_override: "{{ new_serial }}"
+
+    - name: Verifica sintassi zona scritta
+      ansible.builtin.command:
+        cmd: "named-checkzone {{ target_zone }} {{ bind_zones_dir }}/db.{{ target_zone }}"
+      changed_when: false
+
+    - name: Thaw {{ target_zone }} (ricarica file + riabilita DDNS)
+      ansible.builtin.command:
+        cmd: "rndc thaw {{ target_zone }}"
+      changed_when: true
+
+    - name: Attendi re-signing BIND (inline-signing)
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Verifica DS dyn.ninux-nnxx.it sul primario
+      ansible.builtin.command:
+        cmd: "dig DS dyn.ninux-nnxx.it @127.0.0.1 +short"
+      register: ds_check
+      changed_when: false
+      retries: 6
+      delay: 5
+      until: ds_check.stdout | length > 0
+      failed_when: false
+
+    - name: Risultato DS record
+      ansible.builtin.debug:
+        msg: >-
+          DS dyn.ninux-nnxx.it: {{ ds_check.stdout | default('(vuoto — DS non ancora visibile)') }}

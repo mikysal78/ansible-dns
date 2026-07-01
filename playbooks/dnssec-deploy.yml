@@ -1,0 +1,6 @@
+---
+- name: Deploy / migrazione DNSSEC sul primary
+  hosts: dns_primary
+  become: true
+  roles:
+    - role: dnssec

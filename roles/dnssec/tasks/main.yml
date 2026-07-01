@@ -5,6 +5,29 @@
 # Gira solo sul PRIMARY (è lui che firma)
 # ============================================================
 
+# Usato durante migrazione algoritmo (es. alg15→alg13): rimuove le vecchie chiavi
+# prima che BIND le ricarichi con la nuova policy. Eseguire con:
+#   ansible-playbook ... -e dnssec_force_regen=true
+- name: Rimuovi vecchie chiavi e journal DNSSEC (migrazione algoritmo)
+  ansible.builtin.shell:
+    cmd: |
+      systemctl stop bind9
+      rm -f {{ dnssec_key_directory }}/K*
+      rm -f {{ bind_zones_dir }}/*.jnl
+      rm -f {{ bind_zones_dir }}/*.signed
+      systemctl start bind9
+    executable: /bin/bash
+  when: dnssec_force_regen | default(false) | bool
+  changed_when: true
+
+- name: Forza re-signing zone dopo regen chiavi
+  ansible.builtin.command:
+    cmd: "rndc sign {{ item.name }}"
+  loop: "{{ dns_zones }}"
+  when: dnssec_force_regen | default(false) | bool
+  changed_when: true
+  failed_when: false
+
 - name: Crea directory chiavi DNSSEC
   ansible.builtin.file:
     path: "{{ dnssec_key_directory }}"

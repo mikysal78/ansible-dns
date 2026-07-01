@@ -62,7 +62,7 @@
           Formato registrar:  <Key Tag>  <Algoritmo>  <Digest Type>  <Digest>
           Esempio campi:
             Key Tag:      primo numero dopo DS
-            Algorithm:    15  (Ed25519)
+            Algorithm:    13  (ECDSA P-256 / SHA-256)
             Digest Type:  2   (SHA-256)
             Digest:       stringa esadecimale finale
           {% else %}

@@ -20,7 +20,6 @@
     owner: root
     group: "{{ bind_group }}"
     mode: "0640"
-    validate: "named-checkconf %s"
   notify: reload bind9
 
 - name: Rileva host con IP misti pubblico/privato (avviso)
@@ -143,7 +142,7 @@
     label: "{{ item.name }}"
   when:
     - item.ddns_enabled | default(false)
-    - not (dns_force_ddns_rewrite | default(false))
+    - not (dns_force_ddns_rewrite | default(false) | bool)
   vars:
     zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
     zone_serial_override: "{{ (ansible_facts.date_time.date | replace('-', '')) ~ '01' }}"
@@ -163,7 +162,7 @@
     label: "{{ item.name }}"
   when:
     - item.ddns_enabled | default(false)
-    - dns_force_ddns_rewrite | default(false)
+    - dns_force_ddns_rewrite | default(false) | bool
   changed_when: true
 
 - name: Riscrivi le zone DDNS da YAML (riscrittura forzata)
@@ -179,7 +178,7 @@
     label: "{{ item.name }}"
   when:
     - item.ddns_enabled | default(false)
-    - dns_force_ddns_rewrite | default(false)
+    - dns_force_ddns_rewrite | default(false) | bool
   vars:
     zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
     zone_serial_override: >-
@@ -194,7 +193,7 @@
     label: "{{ item.name }}"
   when:
     - item.ddns_enabled | default(false)
-    - dns_force_ddns_rewrite | default(false)
+    - dns_force_ddns_rewrite | default(false) | bool
   changed_when: true
 
 - name: Verifica sintassi zone files

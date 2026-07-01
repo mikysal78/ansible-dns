@@ -1,0 +1,63 @@
+DNSSEC — Dati per OVH
+=====================
+Generato il 2026-07-01
+
+========================================
+ZONA: ninux-nnxx.it
+========================================
+
+--- Formato DS record ---
+Key Tag:      26597
+Algorithm:    13
+Digest Type:  2
+Digest:       A38876620A2946C8A30A591751F6A7DB79011A2AE10C2199B2C0D4E062B0297A
+
+--- Formato DNSKEY (chiave pubblica) ---
+Flags:        257
+Protocol:     3
+Algorithm:    13
+Public Key:   gcqTBpukx4b31fust4DihwfbpCypQqGByL3D76UeFPkBCMsH3bptpNUhKl2lTYDRy4LuMFwe1SYVNfWcjipfuw==
+
+--- Riga completa zona file ---
+ninux-nnxx.it. IN DS 26597 13 2 A38876620A2946C8A30A591751F6A7DB79011A2AE10C2199B2C0D4E062B0297A
+
+
+========================================
+ZONA: romaclubmatera.it
+========================================
+
+--- Formato DS record ---
+Key Tag:      59672
+Algorithm:    13
+Digest Type:  2
+Digest:       7E262D6BEC0224C57AC45E20E6D022D775561FEBAB37E413B664F38B4227BFBE
+
+--- Formato DNSKEY (chiave pubblica) ---
+Flags:        257
+Protocol:     3
+Algorithm:    13
+Public Key:   2e7QX14Jl+XUlvntJctE6ihr9m7AK3pd8wOorYsRTn0RB07LCE6O/SNM+kjQFTYhJLGnZTVNNKnOnfShcGK4VQ==
+
+--- Riga completa zona file ---
+romaclubmatera.it. IN DS 59672 13 2 7E262D6BEC0224C57AC45E20E6D022D775561FEBAB37E413B664F38B4227BFBE
+
+
+========================================
+ZONA: dyn.ninux-nnxx.it
+(DS va nella zona padre ninux-nnxx.it, NON al registrar)
+========================================
+
+--- Formato DS record ---
+Key Tag:      60234
+Algorithm:    13
+Digest Type:  2
+Digest:       C07574D1BD2128EAE2E32DF865F5E8CF2AC900E61059216E7DAFD995F5356B2F
+
+--- Formato DNSKEY (chiave pubblica) ---
+Flags:        257
+Protocol:     3
+Algorithm:    13
+Public Key:   CsfW9MWLyFgZMG0xCjdfBtTcDojq1RulY89RxanEVwMaU+ePaZNFskGVs7y5zXCzRbihaRlu5P/9jHFEVQltWg==
+
+--- Riga completa zona file ---
+dyn.ninux-nnxx.it. IN DS 60234 13 2 C07574D1BD2128EAE2E32DF865F5E8CF2AC900E61059216E7DAFD995F5356B2F

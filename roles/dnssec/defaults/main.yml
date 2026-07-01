@@ -6,13 +6,14 @@
 # ============================================================
 
 # Policy DNSSEC da usare (nome della policy in named.conf)
-# "default" = policy built-in di BIND (algoritmo ed25519, rotazione automatica)
+# "default" = policy built-in di BIND (rotazione automatica)
 # Oppure usa il nome custom definito in dnssec_custom_policy
 dnssec_policy_name: "dns-infra-policy"
 
 # Algoritmo per le chiavi
-# Ed25519 è moderno, veloce, sicuro. ECDSAP256SHA256 è più compatibile.
-dnssec_algorithm: "ed25519"
+# ecdsap256sha256 (alg 13) = OVH supporta alg 8-14 → usare questo
+# ed25519 (alg 15) = NON supportato da OVH
+dnssec_algorithm: "ecdsap256sha256"
 
 # Durata validità firme (signature validity)
 dnssec_sig_validity: "P14D"      # 14 giorni
@@ -20,11 +21,11 @@ dnssec_sig_refresh:  "P3D"       # rinnova le firme 3 giorni prima della scadenz
 
 # KSK (Key Signing Key) — rotazione annuale
 dnssec_ksk_lifetime: "P1Y"       # 1 anno
-dnssec_ksk_algorithm: "ed25519"
+dnssec_ksk_algorithm: "ecdsap256sha256"
 
 # ZSK (Zone Signing Key) — rotazione trimestrale
 dnssec_zsk_lifetime: "P90D"      # 90 giorni
-dnssec_zsk_algorithm: "ed25519"
+dnssec_zsk_algorithm: "ecdsap256sha256"
 
 # NSEC3 per oscurare l'enumerazione delle zone
 # Se false usa NSEC (più semplice ma enumerabile)
@@ -38,3 +39,10 @@ dnssec_key_directory: "/var/lib/bind/keys"
 # DS record: dopo la firma, il role stampa i DS record
 # da inviare al registrar per la chain of trust
 dnssec_print_ds: true
+
+# BIND performance (usato dal template named.conf.options-dnssec.j2)
+bind_transfers_out: 10
+
+# Migrazione algoritmo: rimuove le vecchie chiavi e le rigenera con la nuova policy.
+# Usare solo quando si cambia algoritmo (es. alg15→alg13). Passa -e dnssec_force_regen=true
+dnssec_force_regen: false

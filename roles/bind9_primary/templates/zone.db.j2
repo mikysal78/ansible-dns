@@ -91,6 +91,16 @@ $TTL    {{ zone_data.zone.ttl | default(3600) }}
 {{ '%-30s' | format(r.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  SSHFP   {{ r.algorithm }} {{ r.type }} {{ r.fingerprint }}
 {% endfor %}
 
+; --- Delegazioni sottozone (NS + DS) ---
+{% for d in zone_data.zone.delegations | default([]) %}
+{% for ns in d.ns | default([]) %}
+{{ '%-30s' | format(d.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  NS      {{ ns }}
+{% endfor %}
+{% for ds in d.ds | default([]) %}
+{{ '%-30s' | format(d.name) }} {{ zone_data.zone.ttl | default(3600) }} IN  DS      {{ ds.keytag }} {{ ds.algorithm }} {{ ds.digest_type }} {{ ds.digest }}
+{% endfor %}
+{% endfor %}
+
 ; --- PTR (zone reverse) ---
 {% for r in zone_data.zone.ptr | default([]) %}
 {{ '%-30s' | format(r.last_octet) }} {{ zone_data.zone.ttl | default(3600) }} IN  PTR     {{ r.fqdn }}
