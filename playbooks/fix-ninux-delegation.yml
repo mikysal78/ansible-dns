@@ -41,7 +41,7 @@
       ansible.builtin.debug:
         msg: "Serial corrente: {{ cur_soa.stdout.split()[2] | default('?') }}  →  nuovo: {{ new_serial }}"
 
-    - name: Freeze {{ target_zone }} (salva journal su file, blocca DDNS)
+    - name: Freeze zona DDNS — {{ target_zone }}
       ansible.builtin.command:
         cmd: "rndc freeze {{ target_zone }}"
       changed_when: true
@@ -61,7 +61,7 @@
         cmd: "named-checkzone {{ target_zone }} {{ bind_zones_dir }}/db.{{ target_zone }}"
       changed_when: false
 
-    - name: Thaw {{ target_zone }} (ricarica file + riabilita DDNS)
+    - name: Thaw zona DDNS — {{ target_zone }}
       ansible.builtin.command:
         cmd: "rndc thaw {{ target_zone }}"
       changed_when: true
