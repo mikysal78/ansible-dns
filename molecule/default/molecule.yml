@@ -81,6 +81,10 @@ provisioner:
         bind_zones_dir: /var/lib/bind/zones
         bind_log_dir: /var/log/named
         bind_transfers_out: 10
+        # DNSSEC disabilitato in Molecule: il role dnssec non gira nel test,
+        # quindi la policy non sarebbe definita in named.conf.options e BIND
+        # non partirebbe. Stringa vuota = nessun dnssec-policy in named.conf.local.
+        bind_dnssec_policy: ""
         vault_tsig_secret: "dGVzdHNlY3JldGtleWZvcm1vbGVjdWxldGVzdA=="
         vault_ddns_secret: "ZGRuc3Rlc3RzZWNyZXRrZXlmb3Jtb2xlY3VsZQ=="
         vault_proxmox_token_secret: "molecule-test-token"
