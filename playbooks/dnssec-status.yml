@@ -12,7 +12,7 @@
     - name: Stato chiavi DNSSEC (dnssec-settime)
       ansible.builtin.shell:
         cmd: |
-          for key in {{ dnssec_key_directory }}/K*.key; do
+          for key in /var/lib/bind/keys/K*.key; do
             echo "=== $key ==="
             dnssec-settime -p all "$key"
           done
@@ -36,23 +36,41 @@
       ansible.builtin.debug:
         var: dnssec_zone_status.results
 
-    - name: Mostra DS records attuali
+    - name: DS Records dalle KSK (flag 257) — da pubblicare al registrar
       ansible.builtin.shell:
-        cmd: >
-          dnssec-dsfromkey -a SHA-256
-          $(ls {{ dnssec_key_directory }}/K{{ item.name }}*.key 2>/dev/null | head -1)
+        cmd: |
+          # Trova tutte le KSK (flag 257) per la zona e calcola il DS record SHA-256
+          ksk=$(grep -l 'DNSKEY 257' /var/lib/bind/keys/K{{ item.name }}.+*.key 2>/dev/null | head -1)
+          if [ -n "$ksk" ]; then
+            dnssec-dsfromkey -a SHA-256 "$ksk"
+          else
+            echo "Nessuna KSK trovata per {{ item.name }}"
+          fi
         executable: /bin/bash
-      loop: "{{ dns_zones | selectattr('ddns_enabled', 'equalto', false) | list }}"
+      loop: "{{ dns_zones }}"
       register: ds_output
       changed_when: false
       failed_when: false
 
-    - name: DS Records (da pubblicare/verificare presso il registrar)
+    - name: "=== DS RECORDS — da inserire al registrar del dominio ==="
       ansible.builtin.debug:
         msg: |
           Zona: {{ item.item.name }}
-          {{ item.stdout | default('N/A') }}
+          {% if item.stdout | length > 0 %}
+          {{ item.stdout }}
+
+          Formato registrar:  <Key Tag>  <Algoritmo>  <Digest Type>  <Digest>
+          Esempio campi:
+            Key Tag:      primo numero dopo DS
+            Algorithm:    15  (Ed25519)
+            Digest Type:  2   (SHA-256)
+            Digest:       stringa esadecimale finale
+          {% else %}
+          Nessuna KSK trovata — DNSSEC non attivo per questa zona.
+          {% endif %}
       loop: "{{ ds_output.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
 
     - name: Verifica ruleset nftables attivo
       ansible.builtin.command:
