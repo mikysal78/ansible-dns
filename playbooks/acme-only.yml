@@ -1,0 +1,24 @@
+---
+# ============================================================
+# PLAYBOOK — Deploy certificati ACME + setup deploy sui CT
+# Uso: ansible-playbook playbooks/acme-only.yml --ask-vault-pass
+# ============================================================
+
+- name: Deploy certificati ACME (acme_dns sul primary)
+  hosts: dns_primary
+  become: true
+  roles:
+    - role: acme_dns
+
+- name: Autorizza chiave deploy del primary sui CT consumer
+  hosts: cert_consumers
+  become: true
+  tasks:
+    - name: Autorizza chiave SSH del primary per deploy certificati
+      ansible.posix.authorized_key:
+        user: root
+        key: "{{ hostvars['ns-primary']['acme_deploy_pubkey'] }}"
+        comment: "acme-deploy@ns-primary"
+        state: present
+
+- ansible.builtin.import_playbook: cert-deploy.yml

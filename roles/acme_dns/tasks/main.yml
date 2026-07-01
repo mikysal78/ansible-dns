@@ -2,7 +2,12 @@
 # ============================================================
 # TASKS — acme_dns
 # Installa acme.sh e ottiene certificati wildcard + statici
-# via DNS-01 challenge con nsupdate (DDNS sul primary)
+# via DNS-01 challenge con il plugin ufficiale dns_nsupdate
+# (RFC 2136 / DDNS sul primary BIND9)
+#
+# Versione acme.sh: imposta `acme_version` a un tag preciso
+# (es. "3.1.3") per un deploy deterministico. Se lasciata vuota
+# o non definita, il ruolo rileva da solo l'ultimo tag pubblicato.
 # ============================================================
 
 - name: Installa dipendenze acme.sh
@@ -15,6 +20,26 @@
     state: present
     update_cache: true
 
+# --- Risoluzione versione acme.sh --------------------------------------------
+# Nota: "3.1.4" è la VER dichiarata dentro master ma NON è un tag pubblicato;
+# l'ultimo tag reale va sempre letto dai releases, non dallo script.
+- name: Rileva ultima release acme.sh
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/acmesh-official/acme.sh/releases/latest"
+    return_content: true
+  register: _acme_release
+  when: acme_version | default('') | length == 0
+
+- name: Imposta acme_version dall'ultima release
+  ansible.builtin.set_fact:
+    acme_version: "{{ _acme_release.json.tag_name }}"
+  when: acme_version | default('') | length == 0
+
+- name: Mostra la versione acme.sh in uso
+  ansible.builtin.debug:
+    msg: "acme.sh versione: {{ acme_version }}"
+
+# --- Directory ---------------------------------------------------------------
 - name: Crea directory certificati
   ansible.builtin.file:
     path: "{{ acme_certs_dir }}"
@@ -39,9 +64,10 @@
     group: root
     mode: "0755"
 
+# --- Installazione acme.sh ---------------------------------------------------
 - name: Scarica acme.sh
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh"
+    url: "https://raw.githubusercontent.com/acmesh-official/acme.sh/{{ acme_version }}/acme.sh"
     dest: "{{ acme_install_dir }}/src/acme.sh"
     mode: "0755"
 
@@ -57,6 +83,26 @@
     chdir: "{{ acme_install_dir }}/src"
     creates: "{{ acme_install_dir }}/acme.sh"
 
+# acme.sh scaricato come file singolo NON porta con sé la cartella dnsapi/,
+# e non fa download on-demand degli hook: il plugin va messo esplicitamente
+# in {{ acme_install_dir }}/dnsapi/ altrimenti --dns dns_nsupdate fallisce con
+# "Cannot find DNS API hook for: dns_nsupdate".
+- name: Crea directory dnsapi di acme.sh
+  ansible.builtin.file:
+    path: "{{ acme_install_dir }}/dnsapi"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Scarica hook DNS-01 dns_nsupdate (RFC 2136)
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/acmesh-official/acme.sh/{{ acme_version }}/dnsapi/dns_nsupdate.sh"
+    dest: "{{ acme_install_dir }}/dnsapi/dns_nsupdate.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Registra account ACME
   ansible.builtin.command:
     cmd: >
@@ -67,14 +113,7 @@
       --home {{ acme_install_dir }}
   changed_when: false
 
-- name: Deploy script hook nsupdate per DNS-01
-  ansible.builtin.template:
-    src: acme-dns-hook.sh.j2
-    dest: "{{ acme_install_dir }}/dns-hook.sh"
-    owner: root
-    group: root
-    mode: "0750"
-
+# --- Chiave DDNS -------------------------------------------------------------
 - name: Deploy file chiave DDNS per nsupdate
   ansible.builtin.template:
     src: nsupdate.key.j2
@@ -83,7 +122,35 @@
     group: root
     mode: "0600"
 
-# Emetti certificati per ogni dominio configurato
+# --- Chiave SSH per deploy certificati ai CT ---------------------------------
+- name: Genera chiave SSH per deploy certificati
+  ansible.builtin.command:
+    cmd: ssh-keygen -t ed25519 -f {{ acme_deploy_key }} -N "" -C "acme-deploy@{{ inventory_hostname }}"
+    creates: "{{ acme_deploy_key }}"
+
+- name: Leggi chiave pubblica deploy
+  ansible.builtin.slurp:
+    src: "{{ acme_deploy_key }}.pub"
+  register: _acme_deploy_pubkey
+
+- name: Esponi chiave pubblica come fatto (usata dal play cert_consumers)
+  ansible.builtin.set_fact:
+    acme_deploy_pubkey: "{{ _acme_deploy_pubkey.content | b64decode | trim }}"
+
+# --- Script di deploy per ogni dominio con target ----------------------------
+- name: Deploy script di distribuzione certificati
+  ansible.builtin.template:
+    src: cert-deploy.sh.j2
+    dest: "{{ acme_install_dir }}/deploy-{{ item.domain }}.sh"
+    owner: root
+    group: root
+    mode: "0750"
+  loop: "{{ acme_domains }}"
+  when: item.deploy is defined
+
+# --- Emissione e installazione certificati -----------------------------------
+# NSUPDATE_SERVER e NSUPDATE_KEY sono le variabili lette dal plugin ufficiale
+# dns_nsupdate; NSUPDATE_ZONE è opzionale (il primary è autoritativo).
 - name: Emetti certificati ACME (wildcard + root)
   ansible.builtin.command:
     cmd: >
@@ -94,7 +161,6 @@
       -d "*.{{ item.domain }}"
       --home {{ acme_install_dir }}
       --server {{ acme_server }}
-      --dnssleep 10
       --keylength {{ item.keylength | default('ec-256') }}
     creates: "{{ acme_certs_dir }}/{{ item.domain }}_ecc/{{ item.domain }}.cer"
   environment:
@@ -110,7 +176,7 @@
       -d {{ item.domain }}
       --key-file   {{ acme_certs_dir }}/{{ item.domain }}.key
       --fullchain-file {{ acme_certs_dir }}/{{ item.domain }}.fullchain.pem
-      --reloadcmd  "{{ acme_reload_cmd }}"
+      --reloadcmd  "{{ (acme_install_dir ~ '/deploy-' ~ item.domain ~ '.sh') if item.deploy is defined else acme_reload_cmd }}"
       --home {{ acme_install_dir }}
   loop: "{{ acme_domains }}"
   changed_when: false

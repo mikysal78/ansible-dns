@@ -38,6 +38,24 @@ all:
           ansible_become: true
           dns_secondary_index: 2
 
+    # CT Proxmox che ricevono i certificati dal primary via deploy script
+    # cert_domain: dominio il cui cert deve arrivare su questo CT
+    # cert_reload_cmd: comando da eseguire dopo aver copiato il cert
+    cert_consumers:
+      hosts:
+        ct-web:
+          ansible_host: 10.0.0.16
+          ansible_user: root
+          ansible_port: 2400
+          cert_domain: "example.com"
+          cert_reload_cmd: "systemctl reload nginx"
+        ct-mail:
+          ansible_host: 10.0.0.6
+          ansible_user: root
+          ansible_port: 2400
+          cert_domain: "example.com"
+          cert_reload_cmd: "systemctl reload postfix && systemctl reload dovecot"
+
     # Router OpenWrt per DDNS (opzionale)
     openwrt_routers:
       hosts: {}

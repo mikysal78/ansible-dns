@@ -26,7 +26,7 @@
     - role: bind9_primary   # BIND9 hidden master + zone files
     - role: dnssec          # inline signing DNSSEC
     - role: monitoring      # monitoring
-    # - role: acme_dns       # disabilitato: primary nascosto, non serve TLS pubblico
+    - role: acme_dns       # DNS-01 via nsupdate locale → propagazione ai secondari pubblici
 
 - name: Deploy DNS Secondari (pubblici)
   hosts: dns_secondary
@@ -44,17 +44,22 @@
     - role: ddns_openwrt
 
 # ------------------------------------------------------------
-# Riepilogo variabili vault a fine deploy.
-# I valori sono mostrati in chiaro (il playbook gira su shell fidata).
-# Per nascondere i valori e vedere solo lo stato: -e reveal_secrets=false
+# Riepilogo deploy: infrastruttura, accessi, cert, vault.
+# -e reveal_secrets=false  → nasconde i valori sensibili
 # ------------------------------------------------------------
-- name: Riepilogo variabili vault
+- name: Riepilogo deploy
   hosts: localhost
   gather_facts: false
   connection: local
   vars:
     reveal_secrets: true
-    vault_keys:
+    _primary: "{{ hostvars['ns-primary']['ansible_host'] }}"
+    # Porte monitoring (da roles/monitoring/defaults/main.yml)
+    _grafana_port: 3000
+    _prometheus_port: 9090
+    _alertmanager_port: 9093
+    # Chiavi vault da mostrare
+    _vault_keys:
       - vault_tsig_secret
       - vault_ddns_secret
       - vault_acme_email
@@ -62,7 +67,83 @@
       - vault_alertmanager_smtp_password
       - vault_proxmox_token_secret
   tasks:
-    - name: Variabili vault
+
+    - name: "INFRASTRUTTURA"
+      ansible.builtin.debug:
+        msg:
+          - "Primary (hidden):  {{ _primary }}:2400  [SSH root]"
+          - "NS1 (pubblico):    {{ hostvars['ns1']['ansible_host'] }}"
+          - "NS2 (pubblico):    {{ hostvars['ns2']['ansible_host'] }}"
+          - "WireGuard primary: {{ hostvars['ns-primary']['wg_address'] }}"
+          - "WireGuard ns1:     {{ hostvars['ns1']['wg_address'] }}"
+          - "WireGuard ns2:     {{ hostvars['ns2']['wg_address'] }}"
+
+    - name: "ZONE DNS"
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.name }}
+          [tipo={{ item.type }}]
+          [ddns={{ item.ddns_enabled | default(false) }}]
+      loop: "{{ dns_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: "MONITORING — accesso"
+      ansible.builtin.debug:
+        msg:
+          - "Grafana:        http://{{ _primary }}:{{ _grafana_port }}"
+          - "  utente:       {{ grafana_admin_user | default('admin') }}"
+          - "  password:     {{ vault_grafana_admin_password
+                                if (reveal_secrets | bool)
+                                else '*** (usa -e reveal_secrets=false per nascondere)' }}"
+          - "Prometheus:     http://{{ _primary }}:{{ _prometheus_port }}"
+          - "Alertmanager:   http://{{ _primary }}:{{ _alertmanager_port }}"
+          - ""
+          - "Accesso da notebook (SSH tunnel):"
+          - "  ssh -p 2400 -N \\"
+          - "    -L {{ _grafana_port }}:127.0.0.1:{{ _grafana_port }} \\"
+          - "    -L {{ _prometheus_port }}:127.0.0.1:{{ _prometheus_port }} \\"
+          - "    -L {{ _alertmanager_port }}:127.0.0.1:{{ _alertmanager_port }} \\"
+          - "    root@{{ _primary }}"
+          - "  Poi apri: http://localhost:{{ _grafana_port }}"
+          - ""
+          - "NOTA: nftables limita l'accesso a monitoring_allowed_sources."
+          - "      Se non usi il tunnel, aggiungi il tuo IP in"
+          - "      group_vars/all/main.yml → monitoring_allowed_sources"
+          - "      e rilancia: make deploy"
+
+    - name: "MONITORING — SMTP alerts"
+      ansible.builtin.debug:
+        msg:
+          - "SMTP abilitato:  {{ alertmanager_smtp_enabled | default(false) }}"
+          - "SMTP host:       {{ alertmanager_smtp_host | default('non configurato') }}"
+          - "SMTP from:       {{ alertmanager_smtp_from | default('non configurato') }}"
+          - "SMTP to:         {{ alertmanager_smtp_to | default('non configurato') }}"
+          - "Webhook Slack:   {{ alertmanager_webhook_enabled | default(false) }}"
+
+    - name: "CERTIFICATI ACME"
+      ansible.builtin.debug:
+        msg:
+          - "Dominio:  {{ item.domain }}"
+          - "  file:   {{ acme_certs_dir }}/{{ item.domain }}.{fullchain.pem,key}"
+          - "  deploy: {{ item.deploy | map(attribute='host') | join(', ')
+                          if (item.deploy is defined)
+                          else 'solo primary (nessun CT configurato)' }}"
+          - "  reload: {{ item.deploy | map(attribute='reload_cmd') | join(' | ')
+                          if (item.deploy is defined) else '-' }}"
+      loop: "{{ acme_domains }}"
+      loop_control:
+        label: "{{ item.domain }}"
+
+    - name: "CT CONSUMER"
+      ansible.builtin.debug:
+        msg:
+          - "{{ item }}  →  {{ hostvars[item]['ansible_host'] }}:{{ hostvars[item]['ansible_port'] | default(22) }}"
+          - "  cert:    {{ hostvars[item]['cert_domain'] | default('non configurato') }}"
+          - "  reload:  {{ hostvars[item]['cert_reload_cmd'] | default('-') }}"
+      loop: "{{ groups['cert_consumers'] | default([]) }}"
+
+    - name: "VAULT — stato variabili"
       ansible.builtin.debug:
         msg: >-
           {{ item }}:
@@ -71,6 +152,6 @@
              else (lookup('vars', item)
                    if (reveal_secrets | bool)
                    else 'definita (' ~ (lookup('vars', item) | string | length) ~ ' char)') }}
-      loop: "{{ vault_keys }}"
+      loop: "{{ _vault_keys }}"
       loop_control:
         label: "{{ item }}"

@@ -1,0 +1,59 @@
+---
+# ============================================================
+# PLAYBOOK — Copia certificati dal primary ai CT consumer
+# Gira dal control node (questa macchina), non dal primary.
+# Uso: ansible-playbook playbooks/cert-deploy.yml --ask-vault-pass
+# ============================================================
+
+- name: Preleva certificati dal primary
+  hosts: dns_primary
+  become: true
+  tasks:
+    - name: Crea directory locale temporanea
+      ansible.builtin.file:
+        path: "/tmp/acme-deploy"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Fetch certificati dal primary
+      ansible.builtin.fetch:
+        src: "{{ acme_certs_dir }}/{{ item.0.domain }}.{{ item.1 }}"
+        dest: "/tmp/acme-deploy/{{ item.0.domain }}.{{ item.1 }}"
+        flat: true
+      loop: "{{ acme_domains | product(['fullchain.pem', 'key']) | list }}"
+
+- name: Distribuisce certificati ai CT consumer
+  hosts: cert_consumers
+  become: true
+  tasks:
+    - name: Crea directory certificati sul CT
+      ansible.builtin.file:
+        path: "{{ acme_certs_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copia fullchain
+      ansible.builtin.copy:
+        src: "/tmp/acme-deploy/{{ cert_domain }}.fullchain.pem"
+        dest: "{{ acme_certs_dir }}/{{ cert_domain }}.fullchain.pem"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload service
+
+    - name: Copia chiave privata
+      ansible.builtin.copy:
+        src: "/tmp/acme-deploy/{{ cert_domain }}.key"
+        dest: "{{ acme_certs_dir }}/{{ cert_domain }}.key"
+        owner: root
+        group: root
+        mode: "0640"
+      notify: reload service
+
+  handlers:
+    - name: reload service
+      ansible.builtin.shell: "{{ cert_reload_cmd }}"

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Deploy certificato {{ item.domain }} ai server consumer
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+# Il deploy SSH è best-effort: un CT irraggiungibile non blocca il rinnovo.
+set -uo pipefail
+
+CERT="{{ acme_certs_dir }}/{{ item.domain }}"
+KEY="{{ acme_deploy_key }}"
+SSH="ssh -i $KEY -p {{ acme_deploy_ssh_port }} -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10"
+
+{% for target in item.deploy %}
+if $SSH root@{{ target.host }} true 2>/dev/null; then
+    $SSH root@{{ target.host }} "mkdir -p {{ acme_certs_dir }}"
+    rsync -az -e "$SSH" "${CERT}.fullchain.pem" "${CERT}.key" \
+        root@{{ target.host }}:{{ acme_certs_dir }}/
+    $SSH root@{{ target.host }} \
+        "chmod 640 {{ acme_certs_dir }}/{{ item.domain }}.key && {{ target.reload_cmd }}"
+    echo "Deploy {{ item.domain }} su {{ target.host }}: OK"
+else
+    echo "WARN: {{ target.host }} non raggiungibile, deploy saltato" >&2
+fi
+{% endfor %}
+
+# Reload locale
+{{ acme_reload_cmd }}

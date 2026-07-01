@@ -6,6 +6,26 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.6.0] — 2026-07-01
+
+### Aggiunto
+- `Makefile`: target rapidi per i comandi più comuni (`make deploy`, `make zones`, `make acme`, `make cert-deploy`, `make renew`, `make dnssec`, `make ping`, `make syntax`, `make snapshot`). Supporta override vault via `VAULT="--vault-password-file=..."`.
+- `playbooks/acme-only.yml`: playbook mirato per emissione certificati ACME + distribuzione chiave SSH deploy + copia certificati ai CT, tutto in un'unica run.
+- `playbooks/cert-deploy.yml`: copia certificati esistenti dal primary ai CT consumer direttamente dal control node (senza passare per il primary). Usabile come task manuale o schedulato.
+- `roles/acme_dns`: deploy automatico dei certificati rinnovati ai CT Proxmox consumer. Genera una chiave SSH ed25519 dedicata sul primary, la distribuisce ai CT via `authorized_keys`, crea uno script di deploy per dominio (`/opt/acme.sh/deploy-<domain>.sh`) usato come `--reloadcmd` di acme.sh — attivato al rinnovo automatico (cron 02:30).
+- `roles/acme_dns`: download del plugin `dns_nsupdate` (RFC 2136) con versione pinned; download di `acme.sh` versionato (tag reale da GitHub releases, non da `master`).
+- `inventory/hosts.yml`: gruppo `cert_consumers` con variabili `cert_domain`, `cert_reload_cmd`, `ansible_port: 2400` per ct-web (nginx, romaclubmatera.it) e ct-mail (postfix+dovecot, ninux-nnxx.it).
+- `playbooks/site.yml`: riepilogo deploy esteso con sezioni INFRASTRUTTURA, ZONE DNS, MONITORING (URL + credenziali + comando SSH tunnel per accesso da notebook), SMTP alerts, CERTIFICATI ACME, CT CONSUMER, VAULT.
+
+### Modificato
+- `roles/acme_dns/templates/cert-deploy.sh.j2`: lo script di deploy usa porta SSH configurabile (`acme_deploy_ssh_port`, default 2400); gli errori SSH verso i CT sono non-bloccanti (best-effort) — il rinnovo sul primary non fallisce se un CT è irraggiungibile.
+- `inventory/group_vars/all/main.yml`: aggiunte variabili `acme_deploy_key`, `acme_deploy_ssh_port`, `acme_domains` con campo `deploy` per mappare dominio → CT + reload command.
+
+### Rimosso
+- `roles/acme_dns/templates/acme-dns-hook.sh.j2`: sostituito dal template `cert-deploy.sh.j2` per dominio con supporto multi-CT.
+
+---
+
 ## [1.5.0] — 2026-06-18
 
 ### Aggiunto
