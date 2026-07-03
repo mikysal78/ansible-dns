@@ -11,6 +11,13 @@ dns_admin_email: "hostmaster@example.com"
 dns_primary_ip: "10.99.0.1"
 dns_primary_port: 53
 
+# IP LAN del primary (oltre al tunnel WireGuard sopra): fa sì che BIND
+# ascolti anche su questa interfaccia, per client nsupdate/RFC2136 sulla
+# stessa LAN che non passano dal tunnel WG (es. ACME built-in di Proxmox,
+# plugin nsupdate, per il certificato della propria interfaccia web).
+# Lasciare vuoto ("") per non esporre BIND sulla LAN (solo loopback + WG).
+dns_primary_lan_ip: "10.0.0.14"
+
 # --- IP pubblici dei secondari (lista) ---
 dns_secondary_ips:
   - "203.0.113.10"
@@ -29,6 +36,15 @@ ddns_algorithm: "hmac-sha256"
 ddns_secret: "{{ vault_ddns_secret }}"
 ddns_zone: "dyn.example.com"
 ddns_ttl: 60
+
+# IP/subnet autorizzati a raggiungere la porta 53 (UDP/TCP) del primary per
+# DDNS/nsupdate (oltre a 127.0.0.1, sempre incluso). Serve anche per client
+# nsupdate esterni sulla LAN, es. l'ACME built-in di Proxmox (plugin
+# nsupdate) che deve raggiungere il primary per le challenge DNS-01.
+# L'autenticazione vera resta comunque la chiave TSIG ddns-key: un IP in
+# questa lista senza la chiave riceve REFUSED.
+ddns_allowed_sources:
+  - "10.0.0.0/24"
 
 # --- ACME / Let's Encrypt ---
 acme_email: "admin@example.com"

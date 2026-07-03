@@ -1,10 +1,20 @@
 ---
 # Defaults per il role bind9_primary
 
-# DNSSEC inline signing: impostare uguale a dnssec_policy_name del role dnssec.
+# DNSSEC inline signing: nome della policy, unica fonte di verità (usata sia
+# per dichiarare la dnssec-policy in named.conf.options sia per referenziarla
+# per nome in ogni zona di named.conf.local — nessun'altra copia altrove).
 # Lasciare vuoto per disabilitare DNSSEC nelle dichiarazioni di zona.
 bind_dnssec_policy: "dns-infra-policy"
 bind_dnssec_key_directory: "/var/lib/bind/keys"
+
+# IP LAN del primary su cui far ascoltare BIND oltre a 127.0.0.1 e
+# dns_primary_ip (quest'ultimo è l'IP WireGuard). Serve per client
+# nsupdate/RFC2136 esterni sulla stessa LAN che non passano dal tunnel WG
+# (es. l'ACME built-in di Proxmox, plugin nsupdate, per il certificato
+# della propria interfaccia web). Vuoto = non aggiunge nulla a listen-on
+# (comportamento originale, solo loopback + WireGuard).
+dns_primary_lan_ip: ""
 bind_packages:
   - bind9
   - bind9utils

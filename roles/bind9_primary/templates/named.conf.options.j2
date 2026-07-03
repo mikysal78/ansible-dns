@@ -4,6 +4,35 @@
 include "{{ bind_config_dir }}/tsig-axfr.key";
 include "{{ bind_config_dir }}/ddns.key";
 
+{% if bind_dnssec_policy | default('') != '' %}
+// ============================================================
+// DNSSEC Policy — inline signing automatico (tuning: role dnssec)
+// BIND 9.16+ gestisce rotazione KSK/ZSK, firma, NSEC3
+// Unica dichiarazione della policy: referenziata per nome da ogni
+// zona in named.conf.local (variabile bind_dnssec_policy, stessa
+// usata qui — nessun'altra copia di questa dichiarazione esiste).
+// ============================================================
+dnssec-policy "{{ bind_dnssec_policy }}" {
+
+    // Durata validità firme RRSIG
+    signatures-validity          {{ dnssec_sig_validity | default('P14D') }};
+    signatures-validity-dnskey   {{ dnssec_sig_validity | default('P14D') }};
+    signatures-refresh           {{ dnssec_sig_refresh | default('P3D') }};
+
+    // KSK — chiave di lunga durata, firma i DNSKEY record
+    keys {
+        ksk lifetime {{ dnssec_ksk_lifetime | default('P1Y') }} algorithm {{ dnssec_ksk_algorithm | default('ecdsap256sha256') }};
+        zsk lifetime {{ dnssec_zsk_lifetime | default('P90D') }} algorithm {{ dnssec_zsk_algorithm | default('ecdsap256sha256') }};
+    };
+
+{% if dnssec_use_nsec3 | default(true) %}
+    // NSEC3 — oscura l'enumerazione della zona
+    // iterations=0 e salt vuoto: RFC 9276 raccomanda questi valori
+    nsec3param iterations {{ dnssec_nsec3_iterations | default(0) }} optout no salt-length {{ dnssec_nsec3_salt_length | default(0) }};
+{% endif %}
+};
+{% endif %}
+
 acl "secondaries" {
 {% for ip in dns_secondary_peer_ips %}
     {{ ip }};
@@ -21,7 +50,7 @@ options {
     directory "/var/cache/bind";
     pid-file "/run/named/named.pid";
 
-    listen-on    { 127.0.0.1; {{ dns_primary_ip }}; };
+    listen-on    { 127.0.0.1; {{ dns_primary_ip }};{% if dns_primary_lan_ip | default('') != '' %} {{ dns_primary_lan_ip }};{% endif %} };
     listen-on-v6 { none; };
 
     // Hidden primary: NON risponde a query esterne
