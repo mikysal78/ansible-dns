@@ -36,25 +36,41 @@
         group: root
         mode: "0755"
 
+    # Un host può essere target di più domini (es. un CT mail che serve
+    # sia il dominio principale che un dominio ospitato): la fonte di
+    # verità è acme_domains[].deploy[].host, non un singolo cert_domain
+    # in inventory, che non potrebbe rappresentare più domini per host.
+    - name: Determina i domini da distribuire su questo host
+      ansible.builtin.set_fact:
+        _my_certs: "{{ _my_certs | default([]) + [{'domain': item.domain, 'reload_cmd': (item.deploy | selectattr('host', 'equalto', ansible_host) | map(attribute='reload_cmd') | first)}] }}"
+      loop: "{{ acme_domains | selectattr('deploy', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.domain }}"
+      when: ansible_host in (item.deploy | map(attribute='host') | list)
+
     - name: Copia fullchain
       ansible.builtin.copy:
-        src: "/tmp/acme-deploy/{{ cert_domain }}.fullchain.pem"
-        dest: "{{ acme_certs_dir }}/{{ cert_domain }}.fullchain.pem"
+        src: "/tmp/acme-deploy/{{ item.domain }}.fullchain.pem"
+        dest: "{{ acme_certs_dir }}/{{ item.domain }}.fullchain.pem"
         owner: root
         group: root
         mode: "0644"
-      notify: reload service
+      loop: "{{ _my_certs }}"
+      loop_control:
+        label: "{{ item.domain }}"
 
     - name: Copia chiave privata
       ansible.builtin.copy:
-        src: "/tmp/acme-deploy/{{ cert_domain }}.key"
-        dest: "{{ acme_certs_dir }}/{{ cert_domain }}.key"
+        src: "/tmp/acme-deploy/{{ item.domain }}.key"
+        dest: "{{ acme_certs_dir }}/{{ item.domain }}.key"
         owner: root
         group: root
         mode: "0640"
-      notify: reload service
+      loop: "{{ _my_certs }}"
+      loop_control:
+        label: "{{ item.domain }}"
 
-  handlers:
-    - name: reload service
-      ansible.builtin.shell: "{{ cert_reload_cmd }}" # noqa: command-instead-of-shell no-changed-when
+    - name: Ricarica i servizi per i domini distribuiti
+      ansible.builtin.shell: "{{ item }}" # noqa: command-instead-of-shell no-changed-when
       changed_when: true
+      loop: "{{ _my_certs | map(attribute='reload_cmd') | unique | list }}"
