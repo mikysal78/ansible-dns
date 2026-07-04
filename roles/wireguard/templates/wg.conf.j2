@@ -6,7 +6,7 @@
 [Interface]
 Address = {{ wg_address }}/24
 PrivateKey = {{ wg_private_key }}
-{% if 'dns_secondary' in group_names or 'proxmox' in group_names %}
+{% if 'dns_secondary' in group_names or 'wg_extra_peers' in group_names %}
 ListenPort = {{ wg_port }}
 {% endif %}
 
@@ -21,11 +21,12 @@ AllowedIPs = {{ hostvars[host]['wg_address'] }}/32
 PersistentKeepalive = {{ wg_keepalive }}
 
 {% endfor %}
-{# Peer extra sulla stessa LAN (es. Proxmox host, per l'ACME built-in via nsupdate):
-   stessa logica dei secondari, endpoint fisso + keepalive, ma senza NAT da attraversare #}
-{% for host in groups['proxmox'] | default([]) %}
+{# Peer extra sulla stessa LAN (host che non fanno parte della topologia DNS,
+   es. Proxmox/PBS per l'ACME built-in via nsupdate): stessa logica dei
+   secondari, endpoint fisso + keepalive, ma senza NAT da attraversare #}
+{% for host in groups['wg_extra_peers'] | default([]) %}
 {% if hostvars[host]['wg_address'] is defined %}
-# Peer: {{ host }} (Proxmox host — LAN, ACME built-in via nsupdate)
+# Peer: {{ host }} (LAN — client nsupdate esterno, es. ACME built-in)
 [Peer]
 PublicKey = {{ hostvars[host]['wg_public_key'] }}
 Endpoint = {{ hostvars[host]['ansible_host'] }}:{{ wg_port }}
@@ -35,7 +36,7 @@ PersistentKeepalive = {{ wg_keepalive }}
 {% endif %}
 {% endfor %}
 {% else %}
-{# I secondari (e Proxmox) listano SOLO il primary come peer (no endpoint: è dietro NAT, si connette lui) #}
+{# I secondari (e i peer extra) listano SOLO il primary come peer (no endpoint: è dietro NAT, si connette lui) #}
 {% set primary = groups['dns_primary'][0] %}
 # Peer: {{ primary }} (hidden primary, dietro NAT)
 [Peer]

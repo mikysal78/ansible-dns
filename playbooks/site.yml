@@ -7,20 +7,22 @@
 # ------------------------------------------------------------
 # WireGuard PRIMA di tutto: il tunnel deve esistere prima che
 # BIND tenti i transfer. Gira su TUTTI gli host DNS insieme
-# (+ Proxmox, se ha wg_address: peer per l'ACME built-in via
-# nsupdate) perché il template peer ha bisogno delle chiavi
-# pubbliche di tutti gli host (via hostvars) — un'unica play
-# assicura che i fact di ogni host siano già disponibili quando
-# si renderizza il template sugli altri (stesso step, batch).
-# Il ruolo packages è saltato su proxmox: non tocchiamo il
-# pacchettizzo dell'hypervisor, solo wireguard.
+# (+ wg_extra_peers, es. Proxmox/PBS: peer per client nsupdate
+# esterni come l'ACME built-in) perché il template peer ha
+# bisogno delle chiavi pubbliche di tutti gli host (via hostvars)
+# — un'unica play assicura che i fact di ogni host siano già
+# disponibili quando si renderizza il template sugli altri
+# (stesso step, batch). Il ruolo packages è saltato sui peer
+# extra: non tocchiamo il pacchettizzo di host che non fanno
+# parte della topologia DNS, solo wireguard.
 # ------------------------------------------------------------
-- name: Setup tunnel WireGuard (primary + secondari + Proxmox)
-  hosts: dns_primary:dns_secondary:proxmox
+- name: Setup tunnel WireGuard (primary + secondari + peer extra)
+  hosts: dns_primary:dns_secondary:wg_extra_peers
   become: true
+  tags: [wireguard]
   roles:
     - role: packages        # garantisce pacchetti base prima del tunnel
-      when: "'proxmox' not in group_names"
+      when: "'dns_primary' in group_names or 'dns_secondary' in group_names"
     - role: wireguard
 
 - name: Deploy DNS Primary (hidden master)
@@ -29,6 +31,7 @@
   roles:
     - role: hardening       # hardening OS (ssh, sysctl, fs, auditd, fail2ban...)
     - role: nftables        # firewall (primary: solo secondari e localhost)
+      tags: [nftables]
     - role: bind9_primary   # BIND9 hidden master + zone files
     - role: dnssec          # inline signing DNSSEC
     - role: monitoring      # monitoring
@@ -41,6 +44,7 @@
     - role: hardening
     - role: nftables        # firewall (secondari: pubblico con rate limiting)
     - role: bind9_secondary
+      tags: [bind9_secondary]
 
 - name: Configura DDNS su router OpenWrt
   hosts: openwrt_routers
