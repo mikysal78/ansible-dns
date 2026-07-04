@@ -11,6 +11,8 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 ### Aggiunto
 - **TLSA (DANE)** — README: nuova sezione "Gestione zone → TLSA (DANE)" con procedura per ricavare l'hash dal certificato acme.sh (`usage 3/selector 1/matching 1`) e tabella dei record consigliati per un host web+mail.
 - `zones/example.com.yml`: esempio TLSA esteso con gli owner name mail (`_25`, `_587`, `_465`, `_993`, `_995._tcp.mail`) oltre a `_443._tcp.www`, con commento sul perché SMTP (STARTTLS opportunistico, RFC 7672) beneficia di DANE mentre POP3/IMAP in chiaro no (nessun client li valida via DANE).
+- `SECURITY.md`: policy di responsible disclosure (GitHub Security Advisories o email), essendo il repo pubblico.
+- `.github/dependabot.yml`: aggiornamento mensile automatico delle GitHub Actions usate in `ci.yml`/`release.yml`.
 
 ## [1.7.1] — 2026-07-04
 
