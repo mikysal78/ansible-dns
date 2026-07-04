@@ -858,6 +858,31 @@ ansible-playbook playbooks/update-zones.yml --ask-vault-pass \
    ```
 3. `ansible-playbook playbooks/update-zones.yml --ask-vault-pass`
 
+### TLSA (DANE)
+
+Ogni zona supporta una lista `tlsa` (vedi `zones/example.com.yml`). Con `usage: 3, selector: 1, matching: 1` (DANE-EE della chiave pubblica) l'hash si ricava dal certificato acme.sh in uso:
+
+```bash
+openssl x509 -in /etc/ssl/acme/<dominio>.fullchain.pem -noout -pubkey \
+  | openssl pkey -pubin -outform DER \
+  | openssl dgst -sha256
+```
+
+Record consigliati per un host web+mail (stesso certificato, stesso hash su tutte le porte):
+
+| Owner name              | Servizio          | Perché |
+|--------------------------|-------------------|--------|
+| `_443._tcp.www`          | HTTPS             | validazione standard del certificato web |
+| `_25._tcp.mail`          | SMTP (MTA-to-MTA) | STARTTLS è opportunistico e vulnerabile a downgrade/stripping; il TLSA (RFC 7672) forza i mittenti che supportano DANE (Postfix `smtp_tls_security_level=dane`, Exim, ecc.) a rifiutare la consegna in chiaro invece di degradare silenziosamente |
+| `_587._tcp.mail`         | Submission        | TLS implicito/mandatorio |
+| `_465._tcp.mail`         | SMTPS             | TLS implicito |
+| `_993._tcp.mail`         | IMAPS             | TLS implicito |
+| `_995._tcp.mail`         | POP3S             | TLS implicito |
+
+Non pubblicare TLSA su porte STARTTLS lato client (`_110._tcp`, `_143._tcp`, POP3/IMAP in chiaro): i client mail non validano DANE su queste porte, a differenza degli MTA in consegna SMTP — sarebbe un record senza alcun effetto pratico.
+
+Se la chiave del certificato cambia (nuovo keypair, non solo rinnovo con stessa chiave), l'hash va rigenerato e ridistribuito su tutti gli owner name che lo referenziano.
+
 ---
 
 ## DNSSEC

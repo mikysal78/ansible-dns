@@ -114,13 +114,44 @@ zone:
       value: "mailto:security@example.com"
 
   # --- TLSA (DANE) ---
+  # usage 3/selector 1/matching 1 = hash della chiave pubblica (DANE-EE), stabile
+  # tra i rinnovi finché non cambia la keypair. Ricava l'hash reale con:
+  # openssl x509 -in cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256
+  # Stesso certificato per web e mail → stesso hash su tutti gli owner name.
+  # Non serve TLSA su porte STARTTLS lato client (_110/_143._tcp, POP3/IMAP in
+  # chiaro): i client mail non validano DANE lì. Su _25._tcp (SMTP MTA-to-MTA)
+  # invece è il caso d'uso principale del DANE (RFC 7672): protegge lo STARTTLS
+  # opportunistico da downgrade/stripping quando il mittente supporta DANE.
   tlsa:
     - name: "_443._tcp.www"
       usage: 3
       selector: 1
       matching: 1
-      # Hash SHA-256 di esempio (64 hex). Sostituisci con quello del tuo certificato:
-      # openssl x509 -in cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256
+      certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    - name: "_25._tcp.mail"
+      usage: 3
+      selector: 1
+      matching: 1
+      certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    - name: "_587._tcp.mail"
+      usage: 3
+      selector: 1
+      matching: 1
+      certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    - name: "_465._tcp.mail"
+      usage: 3
+      selector: 1
+      matching: 1
+      certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    - name: "_993._tcp.mail"
+      usage: 3
+      selector: 1
+      matching: 1
+      certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    - name: "_995._tcp.mail"
+      usage: 3
+      selector: 1
+      matching: 1
       certificate_hash: "0000000000000000000000000000000000000000000000000000000000000000"
 
   # --- SSHFP ---
