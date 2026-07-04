@@ -48,7 +48,7 @@ jobs:
           ls -la ansible-dns-${{ github.ref_name }}.tar.gz
 
       - name: Crea GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: "Release ${{ github.ref_name }}"
           body: |
