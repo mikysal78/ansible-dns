@@ -33,9 +33,13 @@ EOF
 
 # Ottieni IP pubblico dell'interfaccia WAN
 get_public_ip() {
-    # Prova prima con l'IP dell'interfaccia
+    # Prova prima con l'IP dell'interfaccia.
+    # NOTA: niente "grep -oP" (lookbehind PCRE) — il grep di busybox su
+    # OpenWrt NON supporta -P e fallisce con "invalid option -- 'P'",
+    # lasciando iface_ip sempre vuoto (verificato con busybox reale).
+    # awk/cut sono POSIX e presenti in busybox, quindi portabili.
     local iface_ip
-    iface_ip=$(ip -4 addr show {{ ddns_interface }} | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+    iface_ip=$(ip -4 addr show {{ ddns_interface }} 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)
 
     # Se l'IP è privato/CGNAT, usa servizio esterno
     case "$iface_ip" in
