@@ -6,6 +6,15 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.7.1] — 2026-07-04
+
+### Aggiunto
+- **Peer WireGuard per Proxmox**: l'host Proxmox (`inventory/hosts.yml`, gruppo `proxmox`) può ora avere un `wg_address` ed entrare nel tunnel WireGuard come peer aggiuntivo, con la stessa logica endpoint+keepalive già usata per i secondari. Serve a far raggiungere BIND ai client nsupdate/RFC2136 esterni sulla LAN (es. l'ACME built-in di Proxmox per il certificato di `pveproxy`) senza mai esporre BIND fuori da loopback+WireGuard.
+- `roles/wireguard/templates/wg.conf.j2`: nuovo loop per i peer del gruppo `proxmox`; `ListenPort` ora impostata anche per questi host (necessaria perché il primary possa dialogare verso di loro).
+- `playbooks/site.yml`: la play "Setup tunnel WireGuard" include ora anche `proxmox` tra gli host (il ruolo `packages` resta escluso su quel gruppo, per non toccare il pacchettizzo dell'hypervisor).
+- `ddns_allowed_sources` di esempio aggiornato con l'IP del tunnel WireGuard di Proxmox (`10.99.0.4`) al posto di una subnet LAN — nessuna apertura di BIND/firewall sulla LAN è necessaria o prevista.
+- README: nuova sezione "ACME built-in di Proxmox (certificato interfaccia web)" con i passi di configurazione del plugin DNS `nsupdate` nativo di Proxmox.
+
 ## [1.7.0] — 2026-07-01
 
 ### Aggiunto

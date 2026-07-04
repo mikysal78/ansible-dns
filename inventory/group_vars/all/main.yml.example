@@ -30,6 +30,16 @@ ddns_secret: "{{ vault_ddns_secret }}"
 ddns_zone: "dyn.example.com"
 ddns_ttl: 60
 
+# IP autorizzati a raggiungere la porta 53 (UDP/TCP) del primary per
+# DDNS/nsupdate, oltre a 127.0.0.1 (sempre incluso). BIND ascolta solo su
+# loopback e sull'IP WireGuard: qui vanno quindi IP del tunnel (10.99.0.0/24),
+# mai IP di LAN pubblica. Esempio: l'ACME built-in di Proxmox (plugin
+# nsupdate) configurato come peer WireGuard per la challenge DNS-01 del
+# certificato della propria interfaccia web (vedi inventory/hosts.yml,
+# gruppo "proxmox", campo wg_address).
+ddns_allowed_sources:
+  - "10.99.0.4"
+
 # --- ACME / Let's Encrypt ---
 acme_email: "admin@example.com"
 acme_server: "https://acme-v02.api.letsencrypt.org/directory"  # prod

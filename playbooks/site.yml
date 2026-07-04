@@ -6,15 +6,21 @@
 
 # ------------------------------------------------------------
 # WireGuard PRIMA di tutto: il tunnel deve esistere prima che
-# BIND tenti i transfer. Gira su TUTTI gli host DNS insieme,
-# perché il template peer ha bisogno delle chiavi pubbliche
-# di tutti gli host (via hostvars).
+# BIND tenti i transfer. Gira su TUTTI gli host DNS insieme
+# (+ Proxmox, se ha wg_address: peer per l'ACME built-in via
+# nsupdate) perché il template peer ha bisogno delle chiavi
+# pubbliche di tutti gli host (via hostvars) — un'unica play
+# assicura che i fact di ogni host siano già disponibili quando
+# si renderizza il template sugli altri (stesso step, batch).
+# Il ruolo packages è saltato su proxmox: non tocchiamo il
+# pacchettizzo dell'hypervisor, solo wireguard.
 # ------------------------------------------------------------
-- name: Setup tunnel WireGuard (primary + secondari)
-  hosts: dns_primary:dns_secondary
+- name: Setup tunnel WireGuard (primary + secondari + Proxmox)
+  hosts: dns_primary:dns_secondary:proxmox
   become: true
   roles:
     - role: packages        # garantisce pacchetti base prima del tunnel
+      when: "'proxmox' not in group_names"
     - role: wireguard
 
 - name: Deploy DNS Primary (hidden master)

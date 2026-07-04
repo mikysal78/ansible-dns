@@ -101,12 +101,13 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - **AXFR/IXFR autenticato** — chiave TSIG `hmac-sha256`
 - **Record supportati** — A, AAAA, CNAME, MX, TXT, SRV, CAA, TLSA, SSHFP, PTR
 
-### Tunnel WireGuard (primary ↔ secondari)
+### Tunnel WireGuard (primary ↔ secondari ↔ Proxmox)
 - **Trasferimento di zona cifrato** — AXFR/IXFR e NOTIFY viaggiano dentro un tunnel WireGuard, mai in chiaro su internet
 - **Primary dietro NAT** — pensato per il caso reale di un hidden primary in LAN (senza IP pubblico) e secondari su VPS cloud
 - **Topologia roaming peer** — il primary inizia la connessione verso i secondari (endpoint pubblici fissi) con `PersistentKeepalive`, mantenendo aperto il percorso attraverso il NAT
 - **Subnet dedicata** `10.99.0.0/24` — gli IP del tunnel diventano gli indirizzi che BIND usa per il transfer
 - Chiavi generate per host e distribuite automaticamente via `hostvars`
+- **Peer extra opzionali** (es. l'host Proxmox stesso, gruppo `proxmox` in inventory con `wg_address` impostato): stessa logica dei secondari (endpoint fisso + keepalive, il primary dialoga verso di loro), usati per far raggiungere BIND a client nsupdate/RFC2136 esterni sulla LAN senza mai esporre BIND stesso fuori da loopback+WireGuard — vedi [ACME built-in di Proxmox](#acme-built-in-di-proxmox-certificato-interfaccia-web) più sotto
 
 ### DNSSEC
 - **Inline signing automatico** — `dnssec-policy` BIND 9.20, zero intervento manuale
@@ -126,6 +127,19 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - Rinnovo automatico via cron (02:30 ogni notte)
 - **Deploy automatico ai CT Proxmox**: il primary genera una chiave SSH ed25519 dedicata, la distribuisce ai CT consumer e copia i certificati rinnovati via rsync (porta configurabile)
 - Deploy **best-effort**: se un CT è irraggiungibile, il rinnovo sul primary non fallisce
+
+### ACME built-in di Proxmox (certificato interfaccia web)
+Per rinnovare il certificato di `pveproxy` (l'interfaccia web di Proxmox VE) con l'ACME nativo di Proxmox (non acme.sh), invece di aprire BIND sulla LAN si aggiunge l'host Proxmox come **peer WireGuard** — coerente con l'architettura hidden-primary, nessuna esposizione di BIND fuori da loopback+tunnel:
+
+1. In `inventory/hosts.yml`, il gruppo `proxmox` ha già `wg_address: 10.99.0.4` per l'host `pve`; `make deploy` (o il play "Setup tunnel WireGuard") genera le chiavi e configura il peer sia sul primary che su Proxmox.
+2. `ddns_allowed_sources` in `inventory/group_vars/all/main.yml` include `10.99.0.4` (l'IP del tunnel, non un IP di LAN): il firewall del primary accetta update DDNS/nsupdate da quell'indirizzo, autenticati comunque dalla chiave TSIG `ddns-key`.
+3. Configura il DNS plugin `nsupdate` di Proxmox (`Datacenter → ACME` oppure `pvenode acme plugin`) con:
+   - **Server**: `10.99.0.1` (IP WireGuard del primary, porta 53)
+   - **Key name**: `ddns-key`, **algoritmo**: `hmac-sha256`
+   - **Secret**: `ansible-vault view inventory/group_vars/all/vault.yml` (variabile `vault_ddns_secret`)
+4. Registra il dominio/hostname della GUI Proxmox come dominio ACME sull'host, con il plugin DNS appena creato.
+
+Nota: `ddns-key` non è ristretta al solo record `_acme-challenge` — chi la possiede può aggiornare qualsiasi record delle zone DDNS. L'unica vera barriera aggiuntiva del peer WireGuard è l'autenticazione crittografica del tunnel stesso.
 
 ### Hardening OS
 - SSH con cifrari moderni (chacha20, AES-GCM, curve25519)
