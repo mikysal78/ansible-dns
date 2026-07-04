@@ -36,16 +36,23 @@
     group: "{{ bind_group }}"
     mode: "0700"
 
-# named.conf.options (dichiarazione dnssec-policy) e named.conf.local
-# (riferimento per zona) sono generati dal role bind9_primary — vedi
-# roles/bind9_primary/templates/named.conf.options.j2 e named.conf.local.j2,
-# guidati da bind_dnssec_policy. Qui NON si ridichiarano più: i due
-# template named.conf.options-dnssec.j2 / named.conf.local-dnssec.j2 sono
-# stati rimossi perché, girando dopo bind9_primary nello stesso play,
-# sovrascrivevano quei file con una versione diversa/più vecchia (ACL con
-# IP pubblici invece di WireGuard, notify yes invece di explicit,
-# querylog assente, ecc.) — bug corretto consolidando la generazione in
-# un unico posto.
+- name: Deploy named.conf.options con dnssec-policy
+  ansible.builtin.template:
+    src: named.conf.options-dnssec.j2
+    dest: "{{ bind_config_dir }}/named.conf.options"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+  notify: reload bind9
+
+- name: Deploy named.conf.local con dnssec-policy per zona
+  ansible.builtin.template:
+    src: named.conf.local-dnssec.j2
+    dest: "{{ bind_config_dir }}/named.conf.local"
+    owner: root
+    group: "{{ bind_group }}"
+    mode: "0640"
+  notify: reload bind9
 
 - name: Ricarica BIND per attivare dnssec-policy
   ansible.builtin.systemd:

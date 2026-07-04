@@ -5,10 +5,10 @@
 # Richiede BIND 9.16+ (Debian Trixie ha 9.20)
 # ============================================================
 
-# Il NOME della policy (dnssec-policy "...") è definito una volta sola in
-# roles/bind9_primary/defaults/main.yml (bind_dnssec_policy): è quel ruolo
-# che dichiara la policy in named.conf.options E la referenzia per zona in
-# named.conf.local. Qui restano solo i parametri di TUNING della policy.
+# Policy DNSSEC da usare (nome della policy in named.conf)
+# "default" = policy built-in di BIND (rotazione automatica)
+# Oppure usa il nome custom definito in dnssec_custom_policy
+dnssec_policy_name: "dns-infra-policy"
 
 # Algoritmo per le chiavi
 # ecdsap256sha256 (alg 13) = OVH supporta alg 8-14 → usare questo
@@ -33,14 +33,15 @@ dnssec_use_nsec3: true
 dnssec_nsec3_iterations: 0       # 0 è raccomandato da RFC 9276 (2022)
 dnssec_nsec3_salt_length: 0      # salt vuoto raccomandato
 
-# Directory dove BIND salva le chiavi DNSSEC. Stessa directory usata da
-# bind_dnssec_key_directory (role bind9_primary, key-directory per zona):
-# referenziata da lì per non duplicare il valore in due posti scollegati.
-dnssec_key_directory: "{{ bind_dnssec_key_directory | default('/var/lib/bind/keys') }}"
+# Directory dove BIND salva le chiavi DNSSEC
+dnssec_key_directory: "/var/lib/bind/keys"
 
 # DS record: dopo la firma, il role stampa i DS record
 # da inviare al registrar per la chain of trust
 dnssec_print_ds: true
+
+# BIND performance (usato dal template named.conf.options-dnssec.j2)
+bind_transfers_out: 10
 
 # Migrazione algoritmo: rimuove le vecchie chiavi e le rigenera con la nuova policy.
 # Usare solo quando si cambia algoritmo (es. alg15→alg13). Passa -e dnssec_force_regen=true
