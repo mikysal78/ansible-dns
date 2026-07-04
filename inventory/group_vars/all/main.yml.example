@@ -113,5 +113,5 @@ proxmox_primary_gw:    "10.0.0.5"
 # hardening_ssh_port: 2400
 # hardening_ssh_allow_tcp_forwarding: "yes"
 # hardening_ssh_permit_open:
-#  - "127.0.0.1:3000"
-#  - "127.0.0.1:9090"
+#   - "127.0.0.1:3000"
+#   - "127.0.0.1:9090"

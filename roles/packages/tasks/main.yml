@@ -15,23 +15,33 @@
     name: "{{ packages_base }}"
     state: present
 
-- name: Installa pacchetti di monitoring e utilità
+# Best-effort: alcuni util potrebbero non esistere su Trixie. Installandoli
+# uno per uno, un pacchetto mancante non blocca gli altri (con la lista unica
+# apt fallirebbe l'intera transazione senza installarne nessuno). Un errore
+# reale (mirror giù, lock dpkg, dipendenze rotte) fa comunque fallire il task.
+- name: Installa pacchetti di monitoring e utilità (best-effort)
   ansible.builtin.apt:
-    name: "{{ packages_utils }}"
+    name: "{{ item }}"
     state: present
-  ignore_errors: true   # alcuni potrebbero non esistere su Trixie
+  loop: "{{ packages_utils }}"
+  register: utils_install
+  failed_when:
+    - utils_install.failed | default(false)
+    - "'no installation candidate' not in (utils_install.msg | default(''))"
+    - "'Unable to locate package' not in (utils_install.msg | default(''))"
 
 - name: Installa pacchetti di sicurezza
   ansible.builtin.apt:
     name: "{{ packages_security }}"
     state: present
 
+# state=absent è idempotente: se il pacchetto non è installato apt non fallisce,
+# quindi non serve ignorare errori (che maschererebbe problemi reali di dpkg).
 - name: Rimuovi pacchetti non necessari
   ansible.builtin.apt:
     name: "{{ packages_to_remove }}"
     state: absent
     purge: true
-  ignore_errors: true
 
 - name: Esegui autoremove
   ansible.builtin.apt:
@@ -50,6 +60,9 @@
     regexp: "^MailTo"
     line: "MailTo = root"
     create: true
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Verifica se BIND9 è già installato
   ansible.builtin.stat:

@@ -16,7 +16,9 @@
 
     - name: Algoritmo e flag di ogni chiave
       ansible.builtin.shell:
-        cmd: grep -h 'DNSKEY' /var/lib/bind/keys/K*.key 2>/dev/null | awk '{print "flag="$1, "alg="$4, "key="substr($5,1,20)"..."}'
+        cmd: |
+          set -o pipefail
+          grep -h 'DNSKEY' /var/lib/bind/keys/K*.key 2>/dev/null | awk '{print "flag="$1, "alg="$4, "key="substr($5,1,20)"..."}'
         executable: /bin/bash
       register: key_info
       changed_when: false
@@ -29,6 +31,7 @@
     - name: Serial corrente delle zone
       ansible.builtin.shell:
         cmd: |
+          set -o pipefail
           for zone in {{ dns_zones | map(attribute='name') | join(' ') }}; do
             echo -n "$zone serial: "
             rndc zonestatus "$zone" 2>/dev/null | grep -i serial || echo "N/A"
@@ -44,7 +47,9 @@
 
     - name: Log BIND ultima ora (sign/notify/transfer/error)
       ansible.builtin.shell:
-        cmd: journalctl -u bind9 --since "1 hour ago" --no-pager | grep -iE 'sign|notify|transfer|error|warn|refused' | tail -30
+        cmd: |
+          set -o pipefail
+          journalctl -u bind9 --since "1 hour ago" --no-pager | grep -iE 'sign|notify|transfer|error|warn|refused' | tail -30
         executable: /bin/bash
       register: bind_log
       changed_when: false

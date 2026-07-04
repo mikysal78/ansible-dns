@@ -6,6 +6,18 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.7.3] — 2026-07-05
+
+### Corretto
+- **`packages`: installazione util in best-effort per-pacchetto** — prima, con `ignore_errors` su una singola lista apt, un solo pacchetto mancante su Trixie faceva fallire l'intera transazione senza installarne *nessuno*, in silenzio. Ora il loop installa ogni pacchetto singolarmente: quelli mancanti vengono tollerati (`failed_when` che ignora solo "no installation candidate"/"Unable to locate package"), mentre un errore reale (mirror giù, lock dpkg, dipendenze rotte) fa comunque fallire il task.
+- CI GitHub Actions aggiornate a runtime Node 24: `actions/checkout@v7`, `actions/setup-python@v6`, `softprops/action-gh-release@v3`; `aquasecurity/trivy-action` pinnato a `@v0.36.0` (era `@master`, non riproducibile).
+
+### Modificato
+- Rimosso `ignore_errors` superfluo dai task apt `state: absent` (`packages`, `nftables`): apt è idempotente sui pacchetti già assenti, non fallisce, e ignorare gli errori maschererebbe solo problemi reali di dpkg.
+- `dnssec-diag.yml`: aggiunto `set -o pipefail` alle shell con pipe (diagnostica più affidabile).
+- `packages`: `mode: "0644"` esplicito sul file logwatch creato con `create: true`.
+- Indentazione YAML uniformata a 2 spazi in `hardening_ssh_permit_open` (inventory ed esempio).
+
 ## [1.7.2] — 2026-07-05
 
 ### Aggiunto

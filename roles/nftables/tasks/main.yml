@@ -18,13 +18,13 @@
     enabled: true
     state: started
 
+# state=absent è idempotente: se iptables non è installato apt non fallisce.
 - name: Rimuovi eventuali regole iptables legacy
   ansible.builtin.apt:
     name:
       - iptables
       - ip6tables
     state: absent
-  ignore_errors: true
 
 - name: Crea directory configurazione nftables
   ansible.builtin.file:
