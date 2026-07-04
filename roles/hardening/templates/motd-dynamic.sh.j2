@@ -10,7 +10,8 @@ LOAD=$(cut -d' ' -f1-3 /proc/loadavg)
 MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
 MEM_USED=$(free -m  | awk '/^Mem:/{print $3}')
 DISK=$(df -h / | awk 'NR==2{print $3"/"$2" ("$5")"}')
-BIND_STATUS=$(systemctl is-active bind9 2>/dev/null || echo "unknown")
+BIND_STATUS=$(systemctl is-active bind9 2>/dev/null)
+BIND_STATUS="${BIND_STATUS:-unknown}"
 NB_ZONES=$(ls /var/lib/bind/zones/db.* 2>/dev/null | wc -l)
 LAST_LOGIN=$(last -n1 -F $USER 2>/dev/null | head -1 | awk '{print $3,$4,$5,$6,$7,$8}')
 
@@ -38,7 +39,8 @@ else
 fi
 
 # Stato nftables
-NFT_STATUS=$(systemctl is-active nftables 2>/dev/null || echo "unknown")
+NFT_STATUS=$(systemctl is-active nftables 2>/dev/null)
+NFT_STATUS="${NFT_STATUS:-unknown}"
 if [ "$NFT_STATUS" = "active" ]; then
     echo -e "  ${B}nftables:${N}   ${G}● attivo${N}"
     # Mostra IP bannati per DNS flood (se ci sono)
@@ -49,7 +51,13 @@ else
 fi
 
 # Aggiornamenti disponibili
-UPDATES=$(apt-get -s upgrade 2>/dev/null | grep -c "^Inst" || echo 0)
+# grep -c stampa sempre un numero (anche 0) a prescindere dal suo exit
+# code: un fallback "|| echo 0" si sommerebbe al valore già stampato
+# (es. "0\n0"), rompendo il confronto numerico -gt sotto. Nessun fallback
+# necessario: se il pipe intero fallisce, UPDATES resta vuoto e va bene
+# comunque perché sotto lo trattiamo con default 0.
+UPDATES=$(apt-get -s upgrade 2>/dev/null | grep -c "^Inst")
+UPDATES="${UPDATES:-0}"
 if [ "$UPDATES" -gt 0 ]; then
     echo ""
     echo -e "  ${Y}⚠  ${UPDATES} aggiornamenti disponibili — esegui: apt upgrade${N}"
