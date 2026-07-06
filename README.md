@@ -127,6 +127,8 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 - Rinnovo automatico via cron (02:30 ogni notte)
 - **Deploy automatico ai CT Proxmox**: il primary genera una chiave SSH ed25519 dedicata, la distribuisce ai CT consumer e copia i certificati rinnovati via rsync (porta configurabile)
 - Deploy **best-effort**: se un CT è irraggiungibile, il rinnovo sul primary non fallisce
+- **Reload solo a certificato cambiato**: `--install-cert` (che esegue sempre il reloadcmd) e i reload sui CT scattano solo se il cert emesso differisce da quello installato — rilanciare il deploy non riavvia nginx/postfix/dovecot per niente. Per forzare (es. dopo aver cambiato un `reload_cmd`): `-e acme_force_install=true`
+- Log dei rinnovi (`/var/log/acme-renew.log`) ruotato mensilmente via logrotate
 
 ### ACME built-in di Proxmox (certificato interfaccia web)
 Per rinnovare il certificato di `pveproxy` (l'interfaccia web di Proxmox VE) con l'ACME nativo di Proxmox (non acme.sh), invece di aprire BIND sulla LAN si aggiunge l'host Proxmox come **peer WireGuard** — coerente con l'architettura hidden-primary, nessuna esposizione di BIND fuori da loopback+tunnel:
@@ -187,6 +189,10 @@ pip install \
 
 ansible-galaxy collection install -r requirements.yml
 ```
+
+> Le host key SSH sono verificate in modalità **TOFU** (`StrictHostKeyChecking=accept-new`):
+> gli host nuovi vengono accettati al primo contatto, una chiave *cambiata* viene rifiutata.
+> Se reinstalli un host, rimuovi prima la vecchia chiave: `ssh-keygen -R <ip-o-hostname>`.
 
 ### Proxmox VE
 - Versione 7.x o 8.x
@@ -692,6 +698,12 @@ zone:
     - { name: "@", flag: 0, tag: "issuewild",  value: "letsencrypt.org" }
 ```
 
+> ⚠️ **SOA `expire` nelle zone DDNS**: tienilo alto (default `1209600` = 14 giorni)
+> anche se la zona è dinamica. È il tempo dopo cui i *secondari* smettono di
+> servire la zona se non raggiungono il primary: con un valore basso (es. 3600)
+> basta 1 ora di tunnel giù perché la zona sparisca dai NS pubblici con SERVFAIL.
+> Il TTL basso dei record dinamici si imposta con `ttl`/`minimum`, non con `expire`.
+
 ---
 
 ## Deploy DNS
@@ -759,6 +771,10 @@ ansible-playbook playbooks/site.yml --ask-vault-pass -e reveal_secrets=false
 packages → hardening → nftables → bind9_primary → dnssec → acme_dns → monitoring
                                 → bind9_secondary (sui secondari)
 ```
+
+I secondari vengono aggiornati **uno alla volta** (`serial: 1`): durante un deploy — anche se un handler riavvia BIND o una config è rotta — uno dei due NS pubblici resta sempre in servizio.
+
+Prima di ogni reload di BIND la configurazione completa viene validata con `named-checkconf`: se è rotta il play fallisce *prima* del reload e named continua a servire con la config precedente.
 
 ---
 
