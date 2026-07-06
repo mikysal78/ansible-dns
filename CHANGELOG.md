@@ -6,7 +6,7 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
-## [Unreleased]
+## [1.7.5] — 2026-07-06
 
 ### Corretto
 - **`acme_dns`: `--install-cert` solo se il certificato è cambiato** — acme.sh esegue *sempre* il reloadcmd insieme a `--install-cert`, quindi ogni deploy riavviava nginx/postfix/dovecot sui CT anche a certificati invariati. Ora un `cmp` confronta il cert emesso con quello installato e l'install scatta solo su rinnovo o prima installazione (forzabile con `-e acme_force_install=true`, es. dopo aver cambiato un reloadcmd).
