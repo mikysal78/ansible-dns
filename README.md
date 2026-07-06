@@ -195,7 +195,7 @@ ansible-galaxy collection install -r requirements.yml
 > Se reinstalli un host, rimuovi prima la vecchia chiave: `ssh-keygen -R <ip-o-hostname>`.
 
 ### Proxmox VE
-- Versione 7.x o 8.x
+- Versione 8.x o 9.x (testato su 9.2)
 - Utente API con token (vedi [Configurazione token API](#configurazione-token-api-proxmox))
 - Storage con supporto snippet cloud-init abilitato
 - Accesso SSH al nodo Proxmox per la creazione del template
