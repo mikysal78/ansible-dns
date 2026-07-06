@@ -54,23 +54,23 @@
     mode: "0640"
   notify: reload bind9
 
-- name: Ricarica BIND per attivare dnssec-policy
-  ansible.builtin.systemd:
-    name: bind9
-    state: reloaded
+# Applica subito gli eventuali reload notificati dai template sopra:
+# se le config non sono cambiate non succede nulla (niente reload
+# inutile a ogni run), se sono cambiate BIND ricarica ORA e la
+# generazione chiavi sotto parte da uno stato deterministico.
+- name: Applica i reload in sospeso (attiva dnssec-policy se cambiata)
+  ansible.builtin.meta: flush_handlers
 
+# Al primo deploy BIND genera le chiavi in modo asincrono dopo il
+# reload: riprova finché non compaiono (fino a 60s).
 - name: Attendi generazione chiavi DNSSEC (fino a 60s)
-  ansible.builtin.wait_for:
-    path: "{{ dnssec_key_directory }}"
-    state: present
-    timeout: 60
-
-- name: Verifica che le chiavi siano state generate
   ansible.builtin.find:
     paths: "{{ dnssec_key_directory }}"
     patterns: "K*.key"
   register: dnssec_keys
-  failed_when: dnssec_keys.matched == 0
+  retries: 12
+  delay: 5
+  until: dnssec_keys.matched > 0
 
 - name: Mostra chiavi DNSSEC generate
   ansible.builtin.debug:

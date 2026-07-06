@@ -181,6 +181,23 @@
   loop: "{{ acme_domains }}"
   changed_when: false
 
+# Il log dei rinnovi cresce all'infinito senza rotazione: 6 mesi bastano
+# per diagnosticare un rinnovo fallito (i cert durano 90 giorni).
+- name: Configura logrotate per il log dei rinnovi
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/acme-renew
+    content: |
+      /var/log/acme-renew.log {
+          monthly
+          rotate 6
+          compress
+          missingok
+          notifempty
+      }
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Configura cron per rinnovo automatico
   ansible.builtin.cron:
     name: "acme.sh renew"

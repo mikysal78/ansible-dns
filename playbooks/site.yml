@@ -37,9 +37,13 @@
     - role: monitoring      # monitoring
     - role: acme_dns       # DNS-01 via nsupdate locale → propagazione ai secondari pubblici
 
+# serial: 1 → i secondari vengono aggiornati UNO alla volta: se un
+# handler riavvia bind9 (o una config è rotta), l'altro NS pubblico
+# resta sempre in servizio e la risoluzione non si interrompe mai.
 - name: Deploy DNS Secondari (pubblici)
   hosts: dns_secondary
   become: true
+  serial: 1
   roles:
     - role: hardening
     - role: nftables        # firewall (secondari: pubblico con rate limiting)
@@ -63,7 +67,11 @@
   connection: local
   vars:
     reveal_secrets: true
-    _primary: "{{ hostvars['ns-primary']['ansible_host'] }}"
+    # Host derivati dai gruppi inventory: nessun hostname cablato,
+    # il riepilogo funziona qualunque nome abbiano gli host.
+    _primary_host: "{{ groups['dns_primary'][0] }}"
+    _primary: "{{ hostvars[_primary_host]['ansible_host'] }}"
+    _ssh_port: "{{ hostvars[_primary_host]['ansible_port'] | default(2400) }}"
     # Porte monitoring (da roles/monitoring/defaults/main.yml)
     _grafana_port: 3000
     _prometheus_port: 9090
@@ -78,15 +86,18 @@
       - vault_proxmox_token_secret
   tasks:
 
-    - name: "INFRASTRUTTURA"
+    - name: "INFRASTRUTTURA — primary"
       ansible.builtin.debug:
         msg:
-          - "Primary (hidden):  {{ _primary }}:2400  [SSH root]"
-          - "NS1 (pubblico):    {{ hostvars['ns1']['ansible_host'] }}"
-          - "NS2 (pubblico):    {{ hostvars['ns2']['ansible_host'] }}"
-          - "WireGuard primary: {{ hostvars['ns-primary']['wg_address'] }}"
-          - "WireGuard ns1:     {{ hostvars['ns1']['wg_address'] }}"
-          - "WireGuard ns2:     {{ hostvars['ns2']['wg_address'] }}"
+          - "Primary (hidden):  {{ _primary }}:{{ _ssh_port }}  [SSH root]"
+          - "WireGuard primary: {{ hostvars[_primary_host]['wg_address'] | default('-') }}"
+
+    - name: "INFRASTRUTTURA — secondari"
+      ansible.builtin.debug:
+        msg: >-
+          {{ item }} (pubblico): {{ hostvars[item]['ansible_host'] }}
+          [wg={{ hostvars[item]['wg_address'] | default('-') }}]
+      loop: "{{ groups['dns_secondary'] | default([]) }}"
 
     - name: "ZONE DNS"
       ansible.builtin.debug:
@@ -110,7 +121,7 @@
           - "Alertmanager:   http://{{ _primary }}:{{ _alertmanager_port }}"
           - ""
           - "Accesso da notebook (SSH tunnel):"
-          - "  ssh -p 2400 -N \\"
+          - "  ssh -p {{ _ssh_port }} -N \\"
           - "    -L {{ _grafana_port }}:127.0.0.1:{{ _grafana_port }} \\"
           - "    -L {{ _prometheus_port }}:127.0.0.1:{{ _prometheus_port }} \\"
           - "    -L {{ _alertmanager_port }}:127.0.0.1:{{ _alertmanager_port }} \\"

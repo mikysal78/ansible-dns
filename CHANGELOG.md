@@ -6,6 +6,20 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [1.7.4] — 2026-07-06
+
+### Corretto
+- **`dnssec`: l'attesa delle chiavi ora aspetta davvero** — il `wait_for` puntava alla *directory* delle chiavi, appena creata dal task precedente, quindi era sempre un no-op: al primo deploy, se BIND impiegava qualche secondo a generare le chiavi, il `find` successivo falliva. Ora è il `find` stesso a riprovare (`retries: 12 / delay: 5 / until: matched > 0`).
+- **`dnssec`: niente più reload di BIND a ogni run** — il task "Ricarica BIND" incondizionato è sostituito da `meta: flush_handlers`: il reload scatta solo se i template `named.conf.*` sono effettivamente cambiati, restando deterministico per la generazione chiavi al primo deploy.
+
+### Modificato
+- **`site.yml`: `serial: 1` sui secondari** — i due NS pubblici vengono aggiornati uno alla volta: durante un deploy (o un restart da handler) uno dei due resta sempre in servizio e la risoluzione non si interrompe mai.
+- **`site.yml`: riepilogo senza hostname cablati** — primary e secondari sono ora derivati dai gruppi inventory (`groups['dns_primary'][0]`, loop su `groups['dns_secondary']`) e la porta SSH da `ansible_port`: il riepilogo funziona qualunque nome abbiano gli host, non solo `ns-primary`/`ns1`/`ns2`.
+- **`ansible.cfg`: host key TOFU** — `StrictHostKeyChecking=no` → `accept-new` (+ `host_key_checking = True`): gli host nuovi vengono accettati al primo contatto, ma una chiave *cambiata* viene rifiutata (protezione MITM). Se un host viene reinstallato: `ssh-keygen -R <host>`.
+
+### Aggiunto
+- `acme_dns`: logrotate per `/var/log/acme-renew.log` (mensile, 6 rotazioni, compress) — prima cresceva all'infinito.
+
 ## [1.7.3] — 2026-07-05
 
 ### Corretto
