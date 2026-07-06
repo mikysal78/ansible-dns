@@ -6,6 +6,11 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [Unreleased]
+
+### Aggiunto
+- **README bilingue** — `README.md` ora in inglese (per la visibilità internazionale del progetto) con nota "progetto italiano 🇮🇹" e badge Made in Italy; la versione italiana originale vive in `README.it.md`. Link-bandierina in cima a entrambi. Il CHANGELOG resta in italiano, la lingua madre del progetto.
+
 ## [1.7.5] — 2026-07-06
 
 ### Corretto

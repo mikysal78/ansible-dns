@@ -1,4 +1,6 @@
-# 🌐 ansible-dns — Infrastruttura DNS Professionale
+# 🌐 ansible-dns — Professional DNS Infrastructure
+
+[🇮🇹 Italiano](README.it.md) · 🇬🇧 English
 
 [![CI](https://github.com/mikysal78/ansible-dns/actions/workflows/ci.yml/badge.svg)](https://github.com/mikysal78/ansible-dns/actions/workflows/ci.yml)
 [![ansible-lint](https://img.shields.io/badge/ansible--lint-passing-brightgreen)](https://github.com/ansible/ansible-lint)
@@ -6,77 +8,83 @@
 [![Debian Trixie](https://img.shields.io/badge/Debian-Trixie-red)](https://www.debian.org/)
 [![BIND9](https://img.shields.io/badge/BIND-9.20-blue)](https://www.isc.org/bind/)
 [![Proxmox](https://img.shields.io/badge/Proxmox-VE-orange)](https://www.proxmox.com/)
+[![Made in Italy](https://img.shields.io/badge/Made%20in-Italy%20🇮🇹-green)](README.it.md)
 
-Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready** con hidden primary su Proxmox VE, N secondari pubblici su VPS, DNSSEC inline signing, hardening OS, firewall nftables, certificati ACME wildcard con deploy automatico ai CT Proxmox, DDNS per router OpenWrt e monitoring con Prometheus/Grafana.
+> 🇮🇹 **An Italian project** — born to run the DNS infrastructure of the
+> [Ninux](https://ninux.org) wireless community network in Basilicata, Italy.
+> The original (and most complete) documentation is in [Italian](README.it.md);
+> this English version is kept in sync with it.
+
+A complete Ansible playbook that deploys a **production-ready** DNS infrastructure: hidden primary on Proxmox VE, N public secondaries on VPS, DNSSEC inline signing, OS hardening, nftables firewall, wildcard ACME certificates with automatic deployment to Proxmox CTs, DDNS for OpenWrt routers, and Prometheus/Grafana monitoring.
 
 ---
 
-## 📋 Indice
+## 📋 Table of contents
 
-- [Architettura](#architettura)
-- [Funzionalità](#funzionalità)
-- [Prerequisiti](#prerequisiti)
-- [Struttura del progetto](#struttura-del-progetto)
-- [Makefile — comandi rapidi](#makefile--comandi-rapidi)
-- [Proxmox — Provisioning VM](#proxmox--provisioning-vm)
-- [OVH — VM secondarie](#ovh--vm-secondarie)
-- [Setup iniziale](#setup-iniziale)
-- [Configurazione](#configurazione)
-- [Deploy DNS](#deploy-dns)
-- [Tunnel WireGuard](#tunnel-wireguard)
-- [Gestione zone](#gestione-zone)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Project layout](#project-layout)
+- [Makefile — quick commands](#makefile--quick-commands)
+- [Proxmox — VM provisioning](#proxmox--vm-provisioning)
+- [OVH — secondary VMs](#ovh--secondary-vms)
+- [Initial setup](#initial-setup)
+- [Configuration](#configuration)
+- [DNS deployment](#dns-deployment)
+- [WireGuard tunnel](#wireguard-tunnel)
+- [Zone management](#zone-management)
 - [DNSSEC](#dnssec)
-- [DDNS — Router OpenWrt](#ddns--router-openwrt)
+- [DDNS — OpenWrt routers](#ddns--openwrt-routers)
 - [Monitoring](#monitoring)
 - [Hardening](#hardening)
-- [Firewall nftables](#firewall-nftables)
-- [Certificati ACME](#certificati-acme)
+- [nftables firewall](#nftables-firewall)
+- [ACME certificates](#acme-certificates)
 - [CI/CD](#cicd)
-- [Operazioni giornaliere](#operazioni-giornaliere)
+- [Day-to-day operations](#day-to-day-operations)
 - [Troubleshooting](#troubleshooting)
-- [Sicurezza](#sicurezza)
+- [Security](#security)
 
 ---
 
-## Architettura
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    PROXMOX VE (rete locale)                         │
+│                    PROXMOX VE (local network)                       │
 │                                                                     │
 │  ┌────────────────────────────────────────────────────────────┐    │
 │  │  VM dns-primary (VMID 200) — Debian Trixie                 │    │
-│  │  192.168.1.10 — 2 vCPU host — 2GB RAM — 40GB VirtIO       │    │
+│  │  192.168.1.10 — 2 host vCPU — 2GB RAM — 40GB VirtIO        │    │
 │  │                                                            │    │
-│  │  • BIND9 Hidden Master (non esposto a internet)            │    │
+│  │  • BIND9 hidden master (never exposed to the internet)     │    │
 │  │  • DNSSEC inline signing (Ed25519, dnssec-policy)          │    │
 │  │  • acme.sh wildcard via DNS-01                             │    │
 │  │  • Prometheus + Grafana + Alertmanager                     │    │
 │  │  • fail2ban + nftables + auditd + rkhunter                 │    │
 │  └──────────────────────┬─────────────────────────────────────┘    │
 └─────────────────────────┼───────────────────────────────────────────┘
-                          │  Tunnel WireGuard cifrato (10.99.0.0/24)
-                          │  AXFR/IXFR (TSIG) + NOTIFY viaggiano qui dentro
+                          │  Encrypted WireGuard tunnel (10.99.0.0/24)
+                          │  AXFR/IXFR (TSIG) + NOTIFY travel in here
            ┌──────────────┼──────────────┬─────────────┐
            ▼              ▼              ▼             ▼
-    ┌────────────┐ ┌────────────┐ ┌────────────┐  fino a 5
-    │ ns1 (VPS)  │ │ ns2 (VPS)  │ │ ns3 (VPS)  │  secondari
+    ┌────────────┐ ┌────────────┐ ┌────────────┐  up to 5
+    │ ns1 (VPS)  │ │ ns2 (VPS)  │ │ ns3 (VPS)  │  secondaries
     │Debian Trixie│ │Debian Trixie│ │Debian Trixie│
     │ wg 10.99.0.2│ │ wg 10.99.0.3│ │ wg 10.99.0.4│
-    │ Query DNS  │ │ Query DNS  │ │ Query DNS  │
-    │ pubbliche  │ │ pubbliche  │ │ pubbliche  │
+    │ Public DNS │ │ Public DNS │ │ Public DNS │
+    │  queries   │ │  queries   │ │  queries   │
     └────────────┘ └────────────┘ └────────────┘
            ▲              ▲              ▲
            └──────────────┼──────────────┘
-                    UDP/TCP 53 pubblico
+                    public UDP/TCP 53
                     (rate limiting + anti-amplification)
 
-  Il primary (dietro NAT) inizia il tunnel verso i secondari (endpoint
-  pubblici); PersistentKeepalive mantiene aperto il percorso. Così il
-  primary resta nascosto e il transfer di zona è cifrato end-to-end.
+  The primary (behind NAT) initiates the tunnel towards the secondaries
+  (public endpoints); PersistentKeepalive keeps the path open. The
+  primary stays hidden and zone transfers are encrypted end-to-end.
 
     ┌─────────────────────────────────────────┐
-    │  Router OpenWrt (DDNS)                  │
+    │  OpenWrt router (DDNS)                  │
     │  nsupdate TSIG → dyn.example.com        │
     │  router-home.dyn.example.com → WAN IP   │
     └─────────────────────────────────────────┘
@@ -84,99 +92,99 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 
 ---
 
-## Funzionalità
+## Features
 
 ### Proxmox VE
-- Provisioning VM primary via **API Proxmox** (`community.general.proxmox_kvm`)
-- Creazione automatica **template Debian Trixie** genericcloud con `virt-customize`
-- Clone template → VM con **cloud-init** (IP statico, utente, chiave SSH, pacchetti)
-- Hardware ottimizzato: `q35`, `UEFI`, `CPU host` (AES-NI + rdrand), VirtIO, balloon disabilitato
-- **Snapshot automatico** post-creazione come baseline pre-deploy
-- Playbook dedicati per gestione snapshot (crea, lista, rollback, elimina)
+- Primary VM provisioning via the **Proxmox API** (`community.general.proxmox_kvm`)
+- Automatic **Debian Trixie genericcloud template** creation with `virt-customize`
+- Template clone → VM with **cloud-init** (static IP, user, SSH key, packages)
+- Tuned hardware: `q35`, `UEFI`, `host CPU` (AES-NI + rdrand), VirtIO, ballooning disabled
+- **Automatic post-creation snapshot** as a pre-deploy baseline
+- Dedicated snapshot management playbooks (create, list, rollback, delete)
 
-### DNS Core
-- **Hidden Primary** — il master non è mai esposto a internet
-- **N secondari pubblici** — da 2 a 5+ VPS, configurazione automatizzata
-- **Zone in YAML** — formato leggibile con supporto a tutti i record professionali
-- **AXFR/IXFR autenticato** — chiave TSIG `hmac-sha256`
-- **Record supportati** — A, AAAA, CNAME, MX, TXT, SRV, CAA, TLSA, SSHFP, PTR
+### DNS core
+- **Hidden primary** — the master is never exposed to the internet
+- **N public secondaries** — from 2 to 5+ VPS, fully automated configuration
+- **Zones as YAML** — readable format supporting every professional record type
+- **Authenticated AXFR/IXFR** — `hmac-sha256` TSIG key
+- **Supported records** — A, AAAA, CNAME, MX, TXT, SRV, CAA, TLSA, SSHFP, PTR
 
-### Tunnel WireGuard (primary ↔ secondari ↔ Proxmox)
-- **Trasferimento di zona cifrato** — AXFR/IXFR e NOTIFY viaggiano dentro un tunnel WireGuard, mai in chiaro su internet
-- **Primary dietro NAT** — pensato per il caso reale di un hidden primary in LAN (senza IP pubblico) e secondari su VPS cloud
-- **Topologia roaming peer** — il primary inizia la connessione verso i secondari (endpoint pubblici fissi) con `PersistentKeepalive`, mantenendo aperto il percorso attraverso il NAT
-- **Subnet dedicata** `10.99.0.0/24` — gli IP del tunnel diventano gli indirizzi che BIND usa per il transfer
-- Chiavi generate per host e distribuite automaticamente via `hostvars`
-- **Peer extra opzionali** (es. l'host Proxmox stesso, gruppo `proxmox` in inventory con `wg_address` impostato): stessa logica dei secondari (endpoint fisso + keepalive, il primary dialoga verso di loro), usati per far raggiungere BIND a client nsupdate/RFC2136 esterni sulla LAN senza mai esporre BIND stesso fuori da loopback+WireGuard — vedi [ACME built-in di Proxmox](#acme-built-in-di-proxmox-certificato-interfaccia-web) più sotto
+### WireGuard tunnel (primary ↔ secondaries ↔ Proxmox)
+- **Encrypted zone transfers** — AXFR/IXFR and NOTIFY travel inside a WireGuard tunnel, never in cleartext across the internet
+- **Primary behind NAT** — designed for the real-world case of a hidden primary on a LAN (no public IP) with secondaries on cloud VPS
+- **Roaming-peer topology** — the primary initiates the connection towards the secondaries (fixed public endpoints) with `PersistentKeepalive`, keeping the path open across NAT
+- **Dedicated subnet** `10.99.0.0/24` — the tunnel IPs become the addresses BIND uses for transfers
+- Per-host keys generated and distributed automatically via `hostvars`
+- **Optional extra peers** (e.g. the Proxmox host itself: `proxmox` inventory group with `wg_address` set): same logic as the secondaries (fixed endpoint + keepalive, the primary talks to them), used to let external nsupdate/RFC2136 clients on the LAN reach BIND without ever exposing BIND outside loopback+WireGuard — see [Proxmox built-in ACME](#proxmox-built-in-acme-web-ui-certificate) below
 
 ### DNSSEC
-- **Inline signing automatico** — `dnssec-policy` BIND 9.20, zero intervento manuale
-- **Ed25519** — algoritmo moderno, chiavi compatte e veloci
-- **KSK** rotazione annuale, **ZSK** ogni 90 giorni — entrambe automatiche
-- **NSEC3** con `iterations=0` (RFC 9276)
-- Compatibile con zone DDNS
+- **Automatic inline signing** — BIND 9.20 `dnssec-policy`, zero manual intervention
+- **Ed25519** — modern algorithm, compact and fast keys
+- **KSK** rotated yearly, **ZSK** every 90 days — both automatic
+- **NSEC3** with `iterations=0` (RFC 9276)
+- Compatible with DDNS zones
 
-### DDNS — Router OpenWrt
-- Aggiornamento record A tramite `nsupdate` con TSIG
-- Rilevamento automatico CGNAT
-- Configurazione UCI automatizzata via Ansible
+### DDNS — OpenWrt routers
+- A-record updates via `nsupdate` with TSIG
+- Automatic CGNAT detection
+- UCI configuration automated with Ansible
 
-### Certificati ACME
-- **acme.sh** con DNS-01 challenge via `nsupdate` (plugin ufficiale `dns_nsupdate`, RFC 2136)
-- Certificati **wildcard** `*.example.com` + root, versione acme.sh pinned
-- Rinnovo automatico via cron (02:30 ogni notte)
-- **Deploy automatico ai CT Proxmox**: il primary genera una chiave SSH ed25519 dedicata, la distribuisce ai CT consumer e copia i certificati rinnovati via rsync (porta configurabile)
-- Deploy **best-effort**: se un CT è irraggiungibile, il rinnovo sul primary non fallisce
-- **Reload solo a certificato cambiato**: `--install-cert` (che esegue sempre il reloadcmd) e i reload sui CT scattano solo se il cert emesso differisce da quello installato — rilanciare il deploy non riavvia nginx/postfix/dovecot per niente. Per forzare (es. dopo aver cambiato un `reload_cmd`): `-e acme_force_install=true`
-- Log dei rinnovi (`/var/log/acme-renew.log`) ruotato mensilmente via logrotate
+### ACME certificates
+- **acme.sh** with DNS-01 challenge via `nsupdate` (official `dns_nsupdate` plugin, RFC 2136)
+- **Wildcard** certificates `*.example.com` + apex, pinned acme.sh version
+- Automatic renewal via cron (02:30 nightly)
+- **Automatic deployment to Proxmox CTs**: the primary generates a dedicated ed25519 SSH key, distributes it to the consumer CTs and copies renewed certificates over SSH (configurable port)
+- **Best-effort** deployment: if a CT is unreachable, renewal on the primary does not fail
+- **Reload only when the certificate changed**: `--install-cert` (which always runs the reloadcmd) and the CT reloads only fire when the issued cert differs from the installed one — re-running the deploy never restarts nginx/postfix/dovecot for nothing. To force (e.g. after changing a `reload_cmd`): `-e acme_force_install=true`
+- Renewal log (`/var/log/acme-renew.log`) rotated monthly via logrotate
 
-### ACME built-in di Proxmox (certificato interfaccia web)
-Per rinnovare il certificato di `pveproxy` (l'interfaccia web di Proxmox VE) con l'ACME nativo di Proxmox (non acme.sh), invece di aprire BIND sulla LAN si aggiunge l'host Proxmox come **peer WireGuard** — coerente con l'architettura hidden-primary, nessuna esposizione di BIND fuori da loopback+tunnel:
+### Proxmox built-in ACME (web UI certificate)
+To renew the `pveproxy` certificate (the Proxmox VE web UI) with Proxmox's native ACME (not acme.sh), instead of opening BIND on the LAN the Proxmox host is added as a **WireGuard peer** — consistent with the hidden-primary architecture, BIND is never exposed outside loopback+tunnel:
 
-1. In `inventory/hosts.yml`, il gruppo `proxmox` ha già `wg_address: 10.99.0.4` per l'host `pve`; `make deploy` (o il play "Setup tunnel WireGuard") genera le chiavi e configura il peer sia sul primary che su Proxmox.
-2. `ddns_allowed_sources` in `inventory/group_vars/all/main.yml` include `10.99.0.4` (l'IP del tunnel, non un IP di LAN): il firewall del primary accetta update DDNS/nsupdate da quell'indirizzo, autenticati comunque dalla chiave TSIG `ddns-key`.
-3. Configura il DNS plugin `nsupdate` di Proxmox (`Datacenter → ACME` oppure `pvenode acme plugin`) con:
-   - **Server**: `10.99.0.1` (IP WireGuard del primary, porta 53)
-   - **Key name**: `ddns-key`, **algoritmo**: `hmac-sha256`
-   - **Secret**: `ansible-vault view inventory/group_vars/all/vault.yml` (variabile `vault_ddns_secret`)
-4. Registra il dominio/hostname della GUI Proxmox come dominio ACME sull'host, con il plugin DNS appena creato.
+1. In `inventory/hosts.yml`, the `proxmox` group already has `wg_address: 10.99.0.4` for the `pve` host; `make deploy` (or the "Setup WireGuard tunnel" play) generates the keys and configures the peer on both the primary and Proxmox.
+2. `ddns_allowed_sources` in `inventory/group_vars/all/main.yml` includes `10.99.0.4` (the tunnel IP, not a LAN IP): the primary's firewall accepts DDNS/nsupdate updates from that address, still authenticated by the `ddns-key` TSIG key.
+3. Configure Proxmox's `nsupdate` DNS plugin (`Datacenter → ACME` or `pvenode acme plugin`) with:
+   - **Server**: `10.99.0.1` (the primary's WireGuard IP, port 53)
+   - **Key name**: `ddns-key`, **algorithm**: `hmac-sha256`
+   - **Secret**: `ansible-vault view inventory/group_vars/all/vault.yml` (variable `vault_ddns_secret`)
+4. Register the Proxmox GUI domain/hostname as an ACME domain on the host, using the DNS plugin just created.
 
-Nota: `ddns-key` non è ristretta al solo record `_acme-challenge` — chi la possiede può aggiornare qualsiasi record delle zone DDNS. L'unica vera barriera aggiuntiva del peer WireGuard è l'autenticazione crittografica del tunnel stesso.
+Note: `ddns-key` is not restricted to the `_acme-challenge` record — whoever holds it can update any record in the DDNS zones. The only real additional barrier of the WireGuard peer is the cryptographic authentication of the tunnel itself.
 
-### Hardening OS
-- SSH con cifrari moderni (chacha20, AES-GCM, curve25519)
-- Sysctl kernel: anti-spoofing, TCP syncookies, ASLR, kptr_restrict
-- Filesystem: `/tmp`, `/var/tmp`, `/dev/shm` con `noexec,nosuid,nodev`
-- auditd con regole CIS (identity, network, file DNS, syscall critiche)
-- sudo con log completo, requiretty, timeout 5 min
-- rkhunter scan notturno + unattended-upgrades solo sicurezza
-- MOTD dinamico con stato BIND, nftables e IP bannati
+### OS hardening
+- SSH with modern ciphers (chacha20, AES-GCM, curve25519)
+- Kernel sysctl: anti-spoofing, TCP syncookies, ASLR, kptr_restrict
+- Filesystem: `/tmp`, `/var/tmp`, `/dev/shm` mounted `noexec,nosuid,nodev`
+- auditd with CIS rules (identity, network, DNS files, critical syscalls)
+- sudo with full logging, requiretty, 5-minute timeout
+- Nightly rkhunter scan + security-only unattended-upgrades
+- Dynamic MOTD with BIND status, nftables state and banned IPs
 
-### Firewall nftables
-- Primary: porta 53 solo da localhost e secondari
-- Secondari: rate limiting per IP, ban automatico set dinamico `dns_flood`
-- Anti-amplification: throttle risposte UDP > 512B in OUTPUT
-- Anti-spoofing bogon su tabella raw, bypass conntrack UDP/53
-- fail2ban integrato con nftables
+### nftables firewall
+- Primary: port 53 only from localhost and the secondaries
+- Secondaries: per-IP rate limiting, automatic bans via the `dns_flood` dynamic set
+- Anti-amplification: throttle UDP responses > 512B in OUTPUT
+- Bogon anti-spoofing on the raw table, UDP/53 conntrack bypass
+- fail2ban integrated with nftables
 
 ### Monitoring
-- Prometheus + bind_exporter + node_exporter su tutti i nodi
-- Gli exporter dei secondari sono raggiunti dal primary **via tunnel WireGuard** (non esposti su internet)
-- Grafana 13 con dashboard DNS overview + system health
-- Alertmanager con 14 alert preconfigurati (email/webhook)
-- Alert: BIND down, zone transfer failure, DDoS detection, DNSSEC key expiry
-- Grafana ascolta solo su `127.0.0.1`: accesso via tunnel SSH (vedi sezione Accesso)
+- Prometheus + bind_exporter + node_exporter on every node
+- The secondaries' exporters are scraped by the primary **through the WireGuard tunnel** (not exposed to the internet)
+- Grafana 13 with DNS overview + system health dashboards
+- Alertmanager with 14 preconfigured alerts (email/webhook)
+- Alerts: BIND down, zone transfer failure, DDoS detection, DNSSEC key expiry
+- Grafana listens on `127.0.0.1` only: access via SSH tunnel (see the Access section)
 
 ### CI/CD
-- ansible-lint profilo `production` + yamllint
-- Molecule con driver Docker (Debian Trixie) + verify assertions
-- GitHub Actions: lint + syntax + molecule + trivy + release automatica
+- ansible-lint `production` profile + yamllint
+- Molecule with the Docker driver (Debian Trixie) + verify assertions
+- GitHub Actions: lint + syntax + molecule + trivy + automatic releases
 
 ---
 
-## Prerequisiti
+## Prerequisites
 
-### Controller Ansible
+### Ansible controller
 ```bash
 python3 --version   # 3.10+
 
@@ -190,29 +198,29 @@ pip install \
 ansible-galaxy collection install -r requirements.yml
 ```
 
-> Le host key SSH sono verificate in modalità **TOFU** (`StrictHostKeyChecking=accept-new`):
-> gli host nuovi vengono accettati al primo contatto, una chiave *cambiata* viene rifiutata.
-> Se reinstalli un host, rimuovi prima la vecchia chiave: `ssh-keygen -R <ip-o-hostname>`.
+> SSH host keys are verified in **TOFU** mode (`StrictHostKeyChecking=accept-new`):
+> new hosts are accepted on first contact, a *changed* key is rejected.
+> If you reinstall a host, remove its old key first: `ssh-keygen -R <ip-or-hostname>`.
 
 ### Proxmox VE
-- Versione 8.x o 9.x (testato su 9.2)
-- Utente API con token (vedi [Configurazione token API](#configurazione-token-api-proxmox))
-- Storage con supporto snippet cloud-init abilitato
-- Accesso SSH al nodo Proxmox per la creazione del template
-- Connettività di rete tra VM primary e VPS secondari (porta 53 TCP)
+- Version 8.x or 9.x (tested on 9.2)
+- API user with token (see [API token configuration](#proxmox-api-token-configuration))
+- Storage with cloud-init snippet support enabled
+- SSH access to the Proxmox node for template creation
+- Network connectivity between the primary VM and the secondary VPS (TCP port 53)
 
-### Server DNS
+### DNS servers
 - **OS**: Debian Trixie (13)
-- **Primary**: 2 vCPU, 2GB RAM, 40GB disco (VM Proxmox)
-- **Secondari**: 1 vCPU, 512MB RAM, 10GB (VPS pubblici — OVH, Hetzner, Contabo, ecc.)
+- **Primary**: 2 vCPU, 2GB RAM, 40GB disk (Proxmox VM)
+- **Secondaries**: 1 vCPU, 512MB RAM, 10GB (public VPS — OVH, Hetzner, Contabo, etc.)
 
-### Router OpenWrt
-- OpenWrt 23.x o superiore
+### OpenWrt routers
+- OpenWrt 23.x or later
 - `opkg install bind-client`
 
 ---
 
-## Struttura del progetto
+## Project layout
 
 ```
 ansible-dns/
@@ -226,14 +234,14 @@ ansible-dns/
 ├── CHANGELOG.md
 │
 ├── inventory/
-│   ├── hosts.yml              # inventory reale (escluso da git)
-│   ├── hosts.yml.example      # template inventory (committato)
+│   ├── hosts.yml              # real inventory (git-ignored)
+│   ├── hosts.yml.example      # inventory template (committed)
 │   └── group_vars/
 │       └── all/
-│           ├── main.yml           # configurazione globale (escluso da git)
-│           ├── main.yml.example   # template configurazione (committato)
-│           ├── vault.yml.example  # template secret (committato)
-│           └── vault.yml          # secret reali cifrati (escluso da git)
+│           ├── main.yml           # global configuration (git-ignored)
+│           ├── main.yml.example   # configuration template (committed)
+│           ├── vault.yml.example  # secrets template (committed)
+│           └── vault.yml          # real encrypted secrets (git-ignored)
 │
 ├── zones/
 │   ├── example.com.yml
@@ -241,7 +249,7 @@ ansible-dns/
 │   └── 203.0.113.reverse.yml
 │
 ├── roles/
-│   ├── proxmox_vm/            # ← NUOVO: provisioning VM su Proxmox
+│   ├── proxmox_vm/            # ← VM provisioning on Proxmox
 │   │   ├── defaults/main.yml
 │   │   ├── tasks/
 │   │   │   ├── main.yml
@@ -269,7 +277,7 @@ ansible-dns/
 │   │       ├── rkhunter.yml
 │   │       └── unattended_upgrades.yml
 │   ├── nftables/
-│   ├── wireguard/             # tunnel cifrato primary <-> secondari
+│   ├── wireguard/             # encrypted primary <-> secondaries tunnel
 │   ├── bind9_primary/
 │   ├── bind9_secondary/
 │   ├── dnssec/
@@ -277,16 +285,16 @@ ansible-dns/
 │   ├── ddns_openwrt/
 │   └── monitoring/
 │
-├── Makefile                           # comandi rapidi (deploy, zones, acme, ...)
+├── Makefile                           # quick commands (deploy, zones, acme, ...)
 ├── playbooks/
-│   ├── proxmox.yml                    # provisioning VM primary
-│   ├── proxmox-prepare-template.yml   # crea template Debian Trixie
-│   ├── proxmox-snapshot.yml           # gestione snapshot
-│   ├── site.yml                       # deploy DNS completo
-│   ├── update-zones.yml               # aggiorna zone con serial auto
-│   ├── acme-only.yml                  # emissione cert + deploy ai CT
-│   ├── cert-deploy.yml                # copia cert dal primary ai CT (via control node)
-│   ├── renew-certs.yml                # rinnovo manuale forzato
+│   ├── proxmox.yml                    # primary VM provisioning
+│   ├── proxmox-prepare-template.yml   # creates the Debian Trixie template
+│   ├── proxmox-snapshot.yml           # snapshot management
+│   ├── site.yml                       # full DNS deployment
+│   ├── update-zones.yml               # updates zones with automatic serial
+│   ├── acme-only.yml                  # cert issuance + deployment to CTs
+│   ├── cert-deploy.yml                # copies certs from primary to CTs (via control node)
+│   ├── renew-certs.yml                # forced manual renewal
 │   └── dnssec-status.yml
 │
 ├── molecule/
@@ -300,24 +308,24 @@ ansible-dns/
 
 ---
 
-## Makefile — comandi rapidi
+## Makefile — quick commands
 
-Il `Makefile` alla radice del progetto evita di ricordare i path dei playbook.
+The `Makefile` at the project root saves you from remembering playbook paths.
 
 ```bash
-make deploy        # deploy completo (site.yml)
-make zones         # aggiorna solo le zone DNS
-make acme          # emetti/rinnova cert e distribuiscili ai CT
-make cert-deploy   # ricopia cert esistenti ai CT (senza re-emettere)
-make renew         # rinnovo manuale forzato certificati ACME
-make dnssec        # stato DNSSEC e prossime rotazioni chiavi
-make vault-summary # riepilogo variabili vault
-make ping          # verifica connettività a tutti gli host
-make syntax        # syntax check di site.yml
-make snapshot      # snapshot Proxmox del CT primary
+make deploy        # full deployment (site.yml)
+make zones         # update DNS zones only
+make acme          # issue/renew certs and distribute them to the CTs
+make cert-deploy   # re-copy existing certs to the CTs (without re-issuing)
+make renew         # forced manual ACME certificate renewal
+make dnssec        # DNSSEC status and upcoming key rotations
+make vault-summary # vault variables summary
+make ping          # check connectivity to every host
+make syntax        # syntax check of site.yml
+make snapshot      # Proxmox snapshot of the primary
 ```
 
-Di default usa `--ask-vault-pass`. Per un file password:
+By default it uses `--ask-vault-pass`. For a password file:
 
 ```bash
 make deploy VAULT="--vault-password-file=/git/.vault_pass"
@@ -325,20 +333,20 @@ make deploy VAULT="--vault-password-file=/git/.vault_pass"
 
 ---
 
-## Proxmox — Provisioning VM
+## Proxmox — VM provisioning
 
-### Configurazione token API Proxmox
+### Proxmox API token configuration
 
-1. Accedi all'interfaccia web Proxmox (`https://proxmox.lan:8006`)
-2. Vai in **Datacenter → Permissions → API Tokens → Add**
-3. Configura:
+1. Log into the Proxmox web UI (`https://proxmox.lan:8006`)
+2. Go to **Datacenter → Permissions → API Tokens → Add**
+3. Configure:
    ```
    User:       ansible@pam
    Token ID:   ansible
-   Privilege Separation: NO  ← importante
+   Privilege Separation: NO  ← important
    ```
-4. Copia il **Token Secret** mostrato (visibile solo una volta)
-5. Aggiungi i permessi necessari:
+4. Copy the **Token Secret** shown (visible only once)
+5. Add the required permissions:
    ```
    Datacenter → Permissions → Add → API Token Permission
    Path:       /
@@ -347,39 +355,39 @@ make deploy VAULT="--vault-password-file=/git/.vault_pass"
    Propagate:  ✓
    ```
 
-6. Salva il secret nel vault:
+6. Save the secret in the vault:
    ```bash
    ansible-vault edit inventory/group_vars/all/vault.yml
-   # Aggiorna: vault_proxmox_token_secret: "il-tuo-token-secret"
+   # Update: vault_proxmox_token_secret: "your-token-secret"
    ```
 
-### Abilitare lo storage snippets
+### Enable the snippets storage
 
-Lo storage `local` su Proxmox deve avere i **Content: Snippets** abilitati:
+The `local` storage on Proxmox must have **Content: Snippets** enabled:
 
 1. **Datacenter → Storage → local → Edit**
-2. **Content**: aggiungi `Snippets`
-3. Salva
+2. **Content**: add `Snippets`
+3. Save
 
-### Requisiti VM Proxmox consigliati
+### Recommended Proxmox VM sizing
 
-| Risorsa | Minimo | Consigliato | Note |
+| Resource | Minimum | Recommended | Notes |
 |---|---|---|---|
-| CPU | 1 vCPU | **2 vCPU** | `host` passthrough per AES-NI |
+| CPU | 1 vCPU | **2 vCPU** | `host` passthrough for AES-NI |
 | RAM | 1 GB | **2 GB** | Grafana (~300MB) + Prometheus (~200MB) |
-| Disco | 20 GB | **40 GB** | 15GB `/` + 20GB `/var` (Prometheus) |
-| Rete | 1 NIC | 1 NIC LAN | Bridge `vmbr0`, IP statico |
-| Macchina | q35 | q35 | UEFI + TPM opzionale |
+| Disk | 20 GB | **40 GB** | 15GB `/` + 20GB `/var` (Prometheus) |
+| Network | 1 NIC | 1 LAN NIC | Bridge `vmbr0`, static IP |
+| Machine | q35 | q35 | UEFI + optional TPM |
 | BIOS | OVMF | OVMF | UEFI |
 
-> **Nota disco**: il role hardening configura automaticamente `/tmp`, `/var/tmp` e `/dev/shm` come `tmpfs noexec`. Per separare `/var` (consigliato per Prometheus), aggiungi un secondo disco nella VM e configura il mount prima del deploy.
+> **Disk note**: the hardening role automatically mounts `/tmp`, `/var/tmp` and `/dev/shm` as `tmpfs noexec`. To separate `/var` (recommended for Prometheus), add a second disk to the VM and configure the mount before deploying.
 
-### Step 1 — Crea il template Debian Trixie
+### Step 1 — Create the Debian Trixie template
 
-Il playbook si connette **via SSH al nodo Proxmox**, scarica l'immagine cloud Debian Trixie, installa `qemu-guest-agent` e la converte in template:
+The playbook connects **to the Proxmox node via SSH**, downloads the Debian Trixie cloud image, installs `qemu-guest-agent` and converts it into a template:
 
 ```bash
-# Prima aggiungi il nodo Proxmox all'inventory
+# First add the Proxmox node to the inventory
 # inventory/hosts.yml:
 #   all:
 #     hosts:
@@ -389,79 +397,79 @@ Il playbook si connette **via SSH al nodo Proxmox**, scarica l'immagine cloud De
 ansible-playbook playbooks/proxmox-prepare-template.yml --ask-vault-pass
 ```
 
-Il playbook è **idempotente**: se il template VMID 9000 esiste già, non fa nulla.
+The playbook is **idempotent**: if template VMID 9000 already exists, it does nothing.
 
-**Cosa viene creato:**
-- Template VMID `9000`, nome `debian-trixie-cloudinit`
-- Immagine ottimizzata con `virt-customize`: qemu-guest-agent, cloud-init, python3
-- Machine type q35, CPU host, VirtIO, drive cloud-init
+**What gets created:**
+- Template VMID `9000`, named `debian-trixie-cloudinit`
+- Image optimised with `virt-customize`: qemu-guest-agent, cloud-init, python3
+- Machine type q35, host CPU, VirtIO, cloud-init drive
 
-### Step 2 — Provisioning VM primary
+### Step 2 — Primary VM provisioning
 
 ```bash
 ansible-playbook playbooks/proxmox.yml --ask-vault-pass
 ```
 
-**Flusso completo:**
+**Full flow:**
 
 ```
-1. Verifica esistenza template (VMID 9000)
-2. Genera snippet cloud-init (user-data + network-config)
-3. Carica snippet su Proxmox storage
-4. Clona template → VM (VMID 200, clone completo)
-5. Configura hardware:
-   - CPU: host passthrough, 2 core
-   - RAM: 2048MB, balloon disabilitato
-   - Disco: ridimensiona a 40GB
-   - Rete: VirtIO su vmbr0
+1. Check template existence (VMID 9000)
+2. Generate cloud-init snippets (user-data + network-config)
+3. Upload snippets to Proxmox storage
+4. Clone template → VM (VMID 200, full clone)
+5. Configure hardware:
+   - CPU: host passthrough, 2 cores
+   - RAM: 2048MB, ballooning disabled
+   - Disk: resize to 40GB
+   - Network: VirtIO on vmbr0
    - Tags: dns, primary, ansible-managed
-6. Configura cloud-init:
-   - IP statico, gateway, DNS
-   - Utente ansible con chiave SSH
-   - Snippet custom con pacchetti
-7. Avvia VM e attende SSH (120s timeout)
-8. Attende completamento cloud-init
-9. Verifica qemu-guest-agent via API
-10. Crea snapshot baseline "post-cloudinit-base"
-11. Stampa checklist VPS secondari
+6. Configure cloud-init:
+   - static IP, gateway, DNS
+   - ansible user with SSH key
+   - custom snippet with packages
+7. Start the VM and wait for SSH (120s timeout)
+8. Wait for cloud-init completion
+9. Check qemu-guest-agent via API
+10. Create the "post-cloudinit-base" baseline snapshot
+11. Print the secondary VPS checklist
 ```
 
-### Step 3 — Gestione snapshot
+### Step 3 — Snapshot management
 
 ```bash
-# Lista tutti gli snapshot
+# List all snapshots
 ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=list"
 
-# Crea snapshot manuale (prima del deploy DNS)
+# Create a manual snapshot (before the DNS deployment)
 ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=create snap_name=pre-deploy-dns"
 
-# Rollback (con conferma interattiva)
+# Rollback (with interactive confirmation)
 ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=rollback snap_name=pre-deploy-dns"
 
-# Elimina snapshot
+# Delete a snapshot
 ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=delete snap_name=pre-deploy-dns"
 ```
 
-### Configurazione Proxmox (`inventory/group_vars/all/main.yml`)
+### Proxmox configuration (`inventory/group_vars/all/main.yml`)
 
 ```yaml
-# --- Connessione API ---
-proxmox_host: "proxmox.lan"         # IP o hostname Proxmox
+# --- API connection ---
+proxmox_host: "proxmox.lan"         # Proxmox IP or hostname
 proxmox_user: "ansible@pam"
 proxmox_token_id: "ansible"
-proxmox_node: "pve"                 # nome nodo (pvesh nodes)
+proxmox_node: "pve"                 # node name (pvesh nodes)
 
 # --- Template ---
 proxmox_template_vmid: 9000
 proxmox_storage: "local-lvm"
-proxmox_iso_storage: "local"        # deve avere Content: Snippets
+proxmox_iso_storage: "local"        # must have Content: Snippets
 proxmox_bridge: "vmbr0"
 
-# --- VM Primary ---
+# --- Primary VM ---
 proxmox_primary_vmid: 200
 proxmox_primary_name: "dns-primary"
 proxmox_primary_cores: 2
@@ -475,63 +483,61 @@ proxmox_primary_netmask: "24"
 cloudinit_user: "ansible"
 cloudinit_timezone: "Europe/Rome"
 cloudinit_ssh_authorized_keys:
-  - "ssh-ed25519 AAAA... tua-chiave-pubblica"
+  - "ssh-ed25519 AAAA... your-public-key"
 ```
 
 ---
 
----
+## OVH — secondary VMs
 
-## OVH — VM secondarie
+OVH VMs work as **public secondaries** alongside (or instead of) Hetzner/Contabo. The `bind9_secondary`, `nftables`, `hardening`, `packages` and `monitoring` roles do not depend on Proxmox: they work on any Debian Trixie reachable over SSH.
 
-Le VM OVH funzionano come **secondari pubblici** insieme (o al posto) di Hetzner/Contabo. I ruoli `bind9_secondary`, `nftables`, `hardening`, `packages` e `monitoring` non dipendono da Proxmox: agiscono su qualsiasi Debian Trixie raggiungibile via SSH.
+> **Provisioning**: unlike the primary on Proxmox (automated VM creation via API), OVH VMs are ordered manually from the OVH panel. Ansible only automates the configuration that follows. For OVH Public Cloud (OpenStack) it is theoretically possible to automate creation too with the `openstack.cloud` collection, but that is out of scope for this project.
 
-> **Provisioning**: a differenza del primary su Proxmox (creazione VM automatizzata via API), le VM OVH vengono ordinate manualmente dal pannello OVH. Ansible automatizza solo la configurazione successiva. Per OVH Public Cloud (OpenStack) è teoricamente possibile automatizzare anche la creazione con la collection `openstack.cloud`, ma non è incluso in questo progetto.
+### 1. Order the OVH VM
 
-### 1. Ordina la VM OVH
+Suitable products for a DNS secondary:
+- **OVH VPS** (from ~€3.50/month) — sufficient: 1 vCPU, 2GB RAM
+- **OVH Public Cloud** (pay-as-you-go instances)
+- **OVH Bare Metal / Eco** (overkill for a secondary, but works)
 
-Prodotti adatti come secondario DNS:
-- **OVH VPS** (da ~3,50€/mese) — sufficiente: 1 vCPU, 2GB RAM
-- **OVH Public Cloud** (istanze a consumo)
-- **OVH Bare Metal / Eco** (overkill per un secondario, ma valido)
+During the order pick **Debian Trixie (13)** as the operating system and upload your **public SSH key**.
 
-Durante l'ordine seleziona **Debian Trixie (13)** come sistema operativo e carica la tua **chiave SSH pubblica**.
+### 2. Configure the OVH firewall (Edge Network Firewall)
 
-### 2. Configura il firewall OVH (Edge Network Firewall)
+This is the most important, OVH-specific step. OVH's Edge Network Firewall has three characteristics you need to understand:
 
-Questo è il punto più importante e specifico di OVH. L'Edge Network Firewall di OVH ha tre caratteristiche che vanno comprese:
+- It is **stateless** and integrated into the Anti-DDoS infrastructure: it only filters traffic coming from **outside** the OVH network. Internal OVH traffic reaches the server on any port anyway.
+- It does **not replace** the host firewall: that is why the `nftables` role remains essential (it also protects against internal OVH traffic and applies rate limiting + anti-amplification).
+- The **priority logic is inverted**: lower numbers have higher priority, and you **always** need a final explicit deny rule, otherwise the authorize rules alone are ineffective.
 
-- È **stateless** e integrato nell'infrastruttura Anti-DDoS: filtra solo il traffico proveniente da **fuori** dalla rete OVH. Il traffico interno OVH raggiunge comunque il server su qualsiasi porta.
-- **Non sostituisce** il firewall a livello server: per questo il role `nftables` resta indispensabile (protegge anche dal traffico interno OVH e applica rate limiting + anti-amplification).
-- La logica delle **priorità è invertita**: numeri più bassi hanno priorità più alta, e serve **sempre** una regola finale di blocco esplicita, altrimenti le sole regole di autorizzazione sono inefficaci.
+Recommended Edge Network Firewall configuration (OVH panel → IP → firewall):
 
-Configurazione consigliata nell'Edge Network Firewall (pannello OVH → IP → firewall):
-
-| Priorità | Azione | Protocollo | Porta | Opzione | Note |
+| Priority | Action | Protocol | Port | Option | Notes |
 |---|---|---|---|---|---|
-| 0 | Authorize | TCP | 22 | — | SSH (meglio se da IP fisso) |
-| 1 | Authorize | UDP | 53 | — | query DNS |
-| 2 | Authorize | TCP | 53 | — | query DNS grandi + AXFR |
-| 3 | Authorize | TCP | — | established | risposte sessioni TCP |
+| 0 | Authorize | TCP | 22 | — | SSH (ideally from a fixed IP) |
+| 1 | Authorize | UDP | 53 | — | DNS queries |
+| 2 | Authorize | TCP | 53 | — | large DNS queries + AXFR |
+| 3 | Authorize | TCP | — | established | TCP session replies |
 | 4 | Authorize | ICMP | — | — | ping / traceroute |
-| 19 | Deny | IPv4 | — | — | **blocco finale obbligatorio** |
+| 19 | Deny | IPv4 | — | — | **mandatory final deny** |
 
-> Essendo stateless, il firewall OVH non tiene traccia delle connessioni: la regola `TCP established` (priorità 3) è necessaria per le risposte. Per il DNS su UDP non serve, perché ogni pacchetto è indipendente.
+> Being stateless, the OVH firewall does not track connections: the `TCP established` rule (priority 3) is required for replies. DNS over UDP does not need it, since every packet is independent.
 
-> **Attenzione Anti-DDoS**: durante un attacco la mitigazione automatica OVH può temporaneamente limitare il traffico DNS verso la VM. Avere più secondari su provider diversi (OVH + Hetzner + ...) mitiga questo rischio: se un secondario è sotto mitigazione, gli altri continuano a rispondere.
+> **Anti-DDoS caveat**: during an attack, OVH's automatic mitigation may temporarily throttle DNS traffic towards the VM. Having multiple secondaries across different providers (OVH + Hetzner + ...) mitigates this risk: if one secondary is under mitigation, the others keep answering.
 
-### 3. Aggiungi la VM all'inventory
+### 3. Add the VM to the inventory
 
 ```yaml
 # inventory/hosts.yml
 dns_secondary:
   hosts:
     ns1:
-      ansible_host: 203.0.113.10        # es. Hetzner
+      ansible_host: 203.0.113.10        # e.g. Hetzner
       ansible_user: ansible
       dns_secondary_index: 1
     ns2-ovh:
-      ansible_host: 51.91.x.x           # IP pubblico VM OVH
+      ansible_host: 51.91.x.x           # OVH VM public IP
       ansible_user: ansible
       dns_secondary_index: 2
 ```
@@ -540,7 +546,7 @@ dns_secondary:
 # inventory/group_vars/all/main.yml
 dns_secondary_ips:
   - "203.0.113.10"
-  - "51.91.x.x"          # VM OVH
+  - "51.91.x.x"          # OVH VM
 ```
 
 ### 4. Deploy
@@ -549,32 +555,32 @@ dns_secondary_ips:
 ansible-playbook playbooks/site.yml --limit dns_secondary --ask-vault-pass
 ```
 
-### 5. Verifica
+### 5. Verify
 
 ```bash
-# Query diretta alla VM OVH
+# Direct query to the OVH VM
 dig @51.91.x.x example.com SOA
 
-# Verifica che il firewall nftables del server sia attivo
+# Check the host nftables firewall is active
 ansible ns2-ovh -m command -a "nft list ruleset" --ask-vault-pass
 
-# Verifica zone transfer ricevuto dal primary
+# Check the zone transfer received from the primary
 ansible ns2-ovh -m command -a "rndc zonestatus example.com" --ask-vault-pass
 ```
 
-### Primary su OVH (sconsigliato ma possibile)
+### Primary on OVH (discouraged but possible)
 
-Se vuoi mettere anche il **primary** su OVH rinunciando all'hidden primary locale, funziona ma cambia il modello di sicurezza: il primary diventa raggiungibile da internet. In tal caso:
-- Le regole nftables del role primary già limitano la porta 53 a localhost e secondari
-- Apri nell'Edge Firewall OVH solo SSH + la porta 53 verso gli IP dei secondari
-- Perdi il vantaggio principale dell'architettura hidden primary (master non esposto)
+If you want to put the **primary** on OVH too, giving up the local hidden primary, it works but changes the security model: the primary becomes reachable from the internet. In that case:
+- The primary role's nftables rules already restrict port 53 to localhost and the secondaries
+- In the OVH Edge Firewall open only SSH + port 53 towards the secondaries' IPs
+- You lose the main advantage of the hidden primary architecture (master not exposed)
 
-L'approccio consigliato resta: **primary locale su Proxmox** + **secondari pubblici su OVH/Hetzner/ecc.**
+The recommended approach remains: **local primary on Proxmox** + **public secondaries on OVH/Hetzner/etc.**
 
 
-## Setup iniziale
+## Initial setup
 
-### 1. Clona il repository
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/mikysal78/ansible-dns.git
@@ -583,36 +589,36 @@ pip install ansible-core>=2.16
 ansible-galaxy collection install -r requirements.yml
 ```
 
-### 2. Genera le chiavi TSIG
+### 2. Generate the TSIG keys
 
 ```bash
-# Chiave per trasferimenti zona (AXFR)
+# Zone transfer key (AXFR)
 tsig-keygen -a hmac-sha256 axfr-key
 
-# Chiave per DDNS (router OpenWrt + acme.sh)
+# DDNS key (OpenWrt routers + acme.sh)
 tsig-keygen -a hmac-sha256 ddns-key
 ```
 
-### 3. Configura il vault
+### 3. Configure the vault
 
-Copia il template `vault.yml.example` e compilalo con i valori reali:
+Copy the `vault.yml.example` template and fill it with real values:
 
 ```bash
 cp inventory/group_vars/all/vault.yml.example inventory/group_vars/all/vault.yml
 
-# Modifica con i tuoi secret (TSIG, password, token Proxmox)
+# Edit with your secrets (TSIG, passwords, Proxmox token)
 $EDITOR inventory/group_vars/all/vault.yml
 
-# Cifra il file (non sarà mai committato in chiaro grazie a .gitignore)
+# Encrypt the file (it will never be committed in cleartext thanks to .gitignore)
 ansible-vault encrypt inventory/group_vars/all/vault.yml
 ```
 
-Le chiavi richieste sono documentate in `vault.yml.example`:
+The required keys are documented in `vault.yml.example`:
 `vault_tsig_secret`, `vault_ddns_secret`, `vault_acme_email`,
 `vault_grafana_admin_password`, `vault_alertmanager_smtp_password`,
 `vault_proxmox_token_secret`.
 
-### 4. Configura l'inventory
+### 4. Configure the inventory
 
 ```yaml
 # inventory/hosts.yml
@@ -641,38 +647,38 @@ all:
           ddns_hostname: "router-home.dyn.example.com"
 ```
 
-### 5. Aggiungi la chiave SSH pubblica
+### 5. Add your public SSH key
 
 ```yaml
 # inventory/group_vars/all/main.yml
 cloudinit_ssh_authorized_keys:
-  - "ssh-ed25519 AAAA... tua-chiave"
+  - "ssh-ed25519 AAAA... your-key"
 
 hardening_ssh_authorized_keys:
-  - key: "ssh-ed25519 AAAA... tua-chiave"
+  - key: "ssh-ed25519 AAAA... your-key"
     user: ansible
 ```
 
 ---
 
-## Configurazione
+## Configuration
 
-### Variabili principali (`inventory/group_vars/all/main.yml`)
+### Main variables (`inventory/group_vars/all/main.yml`)
 
-| Variabile | Default | Descrizione |
+| Variable | Default | Description |
 |---|---|---|
-| `dns_domain_base` | `example.com` | Dominio principale |
-| `dns_primary_ip` | `192.168.1.10` | IP privato hidden primary |
-| `dns_secondary_ips` | lista | IP VPS secondari pubblici |
-| `dns_tsig_key_name` | `axfr-key` | Nome chiave TSIG AXFR |
-| `ddns_zone` | `dyn.example.com` | Zona record DDNS |
-| `proxmox_host` | `proxmox.lan` | Host Proxmox |
-| `proxmox_primary_vmid` | `200` | VMID VM primary |
-| `proxmox_primary_ip` | `192.168.1.10` | IP statico VM |
-| `prometheus_retention` | `30d` | Retention dati Prometheus |
-| `alertmanager_smtp_enabled` | `false` | Abilita notifiche email |
+| `dns_domain_base` | `example.com` | Main domain |
+| `dns_primary_ip` | `192.168.1.10` | Hidden primary private IP |
+| `dns_secondary_ips` | list | Public secondary VPS IPs |
+| `dns_tsig_key_name` | `axfr-key` | AXFR TSIG key name |
+| `ddns_zone` | `dyn.example.com` | DDNS records zone |
+| `proxmox_host` | `proxmox.lan` | Proxmox host |
+| `proxmox_primary_vmid` | `200` | Primary VM VMID |
+| `proxmox_primary_ip` | `192.168.1.10` | VM static IP |
+| `prometheus_retention` | `30d` | Prometheus data retention |
+| `alertmanager_smtp_enabled` | `false` | Enable email notifications |
 
-### Formato zone YAML
+### YAML zone format
 
 ```yaml
 zone:
@@ -698,110 +704,111 @@ zone:
     - { name: "@", flag: 0, tag: "issuewild",  value: "letsencrypt.org" }
 ```
 
-> ⚠️ **SOA `expire` nelle zone DDNS**: tienilo alto (default `1209600` = 14 giorni)
-> anche se la zona è dinamica. È il tempo dopo cui i *secondari* smettono di
-> servire la zona se non raggiungono il primary: con un valore basso (es. 3600)
-> basta 1 ora di tunnel giù perché la zona sparisca dai NS pubblici con SERVFAIL.
-> Il TTL basso dei record dinamici si imposta con `ttl`/`minimum`, non con `expire`.
+> ⚠️ **SOA `expire` in DDNS zones**: keep it high (default `1209600` = 14 days)
+> even when the zone is dynamic. It is the time after which the *secondaries*
+> stop serving the zone if they cannot reach the primary: with a low value
+> (e.g. 3600) one hour of tunnel downtime is enough to make the zone vanish
+> from the public NS with SERVFAIL. The low TTL for dynamic records is set
+> with `ttl`/`minimum`, not with `expire`.
 
 ---
 
-## Deploy DNS
+## DNS deployment
 
-### Flusso completo consigliato
+### Recommended full flow
 
 ```bash
-# 1. Crea template Debian Trixie su Proxmox (una volta sola)
+# 1. Create the Debian Trixie template on Proxmox (one-off)
 ansible-playbook playbooks/proxmox-prepare-template.yml --ask-vault-pass
 
-# 2. Provisioning VM primary
+# 2. Primary VM provisioning
 ansible-playbook playbooks/proxmox.yml --ask-vault-pass
 
-# 3. Snapshot pre-deploy (sicurezza)
+# 3. Pre-deploy snapshot (safety)
 ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=create snap_name=pre-deploy-dns"
 
-# 4. Deploy infrastruttura DNS completa
+# 4. Full DNS infrastructure deployment
 ansible-playbook playbooks/site.yml --ask-vault-pass
 
-# 5. Verifica e pubblica DS record DNSSEC presso il registrar
+# 5. Verify and publish the DNSSEC DS records at the registrar
 ansible-playbook playbooks/dnssec-status.yml --ask-vault-pass
 ```
 
-### Opzioni deploy parziale
+### Partial deployment options
 
 ```bash
-# Solo primary
+# Primary only
 ansible-playbook playbooks/site.yml --limit dns_primary --ask-vault-pass
 
-# Solo secondari
+# Secondaries only
 ansible-playbook playbooks/site.yml --limit dns_secondary --ask-vault-pass
 
-# Solo hardening
+# Hardening only
 ansible-playbook playbooks/site.yml --tags hardening --ask-vault-pass
 
 # Dry run
 ansible-playbook playbooks/site.yml --check --diff --ask-vault-pass
 ```
 
-### Riepilogo a fine deploy
+### End-of-deploy summary
 
-`site.yml` termina con un play di riepilogo che mostra:
+`site.yml` ends with a summary play showing:
 
-- **INFRASTRUTTURA** — IP primary, NS1/NS2 pubblici, indirizzi WireGuard
-- **ZONE DNS** — zone attive con tipo e stato DDNS
-- **MONITORING** — URL Grafana/Prometheus/Alertmanager con credenziali e comando SSH tunnel pronto per il notebook
-- **MONITORING SMTP** — stato notifiche email/webhook
-- **CERTIFICATI ACME** — file per dominio e CT destinatari
-- **CT CONSUMER** — elenco CT con cert e reload command
-- **VAULT** — valori delle variabili cifrate
+- **INFRASTRUCTURE** — primary IP, public NS1/NS2, WireGuard addresses
+- **DNS ZONES** — active zones with type and DDNS status
+- **MONITORING** — Grafana/Prometheus/Alertmanager URLs with credentials and a ready-made SSH tunnel command
+- **MONITORING SMTP** — email/webhook notification status
+- **ACME CERTIFICATES** — files per domain and target CTs
+- **CT CONSUMERS** — CT list with cert and reload command
+- **VAULT** — encrypted variable values
 
 ```bash
-# nasconde i valori sensibili (utile su shell condivise o in CI)
+# hide sensitive values (useful on shared shells or in CI)
 ansible-playbook playbooks/site.yml --ask-vault-pass -e reveal_secrets=false
 ```
 
-> ⚠️ Con `reveal_secrets=true` (default) le password appaiono in chiaro nello stdout.
-> Non eseguire con output visibile ad altri. Per ispezionare il vault:
-> `ansible-vault view inventory/group_vars/all/vault.yml`.
+> ⚠️ With `reveal_secrets=true` (the default) passwords are printed in cleartext
+> to stdout. Do not run it with your output visible to others. To inspect the
+> vault: `ansible-vault view inventory/group_vars/all/vault.yml`.
 
-### Ordine roles in `site.yml`
+### Role order in `site.yml`
 
 ```
 packages → hardening → nftables → bind9_primary → dnssec → acme_dns → monitoring
-                                → bind9_secondary (sui secondari)
+                                → bind9_secondary (on the secondaries)
 ```
 
-I secondari vengono aggiornati **uno alla volta** (`serial: 1`): durante un deploy — anche se un handler riavvia BIND o una config è rotta — uno dei due NS pubblici resta sempre in servizio.
+The secondaries are updated **one at a time** (`serial: 1`): during a deployment — even if a handler restarts BIND or a config is broken — one of the two public NS always stays in service.
 
-Prima di ogni reload di BIND la configurazione completa viene validata con `named-checkconf`: se è rotta il play fallisce *prima* del reload e named continua a servire con la config precedente.
+Before every BIND reload the full configuration is validated with `named-checkconf`: if it is broken the play fails *before* the reload and named keeps serving with the previous config.
 
 ---
 
-## Tunnel WireGuard
+## WireGuard tunnel
 
-Il primary è un **hidden master in LAN dietro NAT**, senza IP pubblico. I secondari sono su VPS pubblici. Senza un percorso tra i due, l'AXFR non potrebbe funzionare (un IP privato non è instradabile su internet). La soluzione è un tunnel WireGuard cifrato.
+The primary is a **hidden master on a LAN behind NAT**, with no public IP. The secondaries are on public VPS. Without a path between the two, AXFR could not work (a private IP is not routable on the internet). The solution is an encrypted WireGuard tunnel.
 
-### Topologia
+### Topology
 
-Il primary (dietro NAT) **inizia** la connessione verso i secondari, che hanno endpoint pubblici fissi. `PersistentKeepalive` tiene aperto il percorso attraverso il NAT. Una volta su, il tunnel è bidirezionale e AXFR/NOTIFY ci viaggiano dentro cifrati.
+The primary (behind NAT) **initiates** the connection towards the secondaries, which have fixed public endpoints. `PersistentKeepalive` keeps the path open through NAT. Once up, the tunnel is bidirectional and AXFR/NOTIFY travel inside it encrypted.
 
 ```
-Primary (NAT)              Secondari (IP pubblici)
-10.99.0.1   ──connette──►  10.99.0.2  (ns1, ascolta :51820)
-            ──connette──►  10.99.0.3  (ns2, ascolta :51820)
-            keepalive 25s mantiene aperti i buchi NAT
+Primary (NAT)              Secondaries (public IPs)
+10.99.0.1   ──connects──►  10.99.0.2  (ns1, listens :51820)
+            ──connects──►  10.99.0.3  (ns2, listens :51820)
+            25s keepalive keeps the NAT holes open
 ```
 
-### Configurazione
+### Configuration
 
-Ogni host DNS ha un indirizzo nel tunnel, assegnato nell'inventory:
+Every DNS host has an address inside the tunnel, assigned in the inventory:
 
 ```yaml
 # inventory/hosts.yml
 ns-primary:
   ansible_host: 10.0.0.14
-  wg_address: 10.99.0.1      # IP nel tunnel
+  wg_address: 10.99.0.1      # tunnel IP
 ns1:
   ansible_host: 203.0.113.10
   wg_address: 10.99.0.2
@@ -810,7 +817,7 @@ ns2:
   wg_address: 10.99.0.3
 ```
 
-Gli IP DNS usati per il transfer puntano al tunnel:
+The DNS IPs used for transfers point at the tunnel:
 
 ```yaml
 # inventory/group_vars/all/main.yml
@@ -820,55 +827,55 @@ dns_secondary_ips:
   - "10.99.0.3"
 ```
 
-Il play WireGuard in `site.yml` gira su primary e secondari **insieme**, perché il template ha bisogno delle chiavi pubbliche di tutti gli host (via `hostvars`).
+The WireGuard play in `site.yml` runs on the primary and the secondaries **together**, because the template needs every host's public key (via `hostvars`).
 
-### Verifica
+### Verify
 
 ```bash
-# handshake attivo con entrambi i peer?
+# active handshake with both peers?
 ssh -p 2400 root@10.0.0.14 "wg show"
 
-# il primary raggiunge i secondari nel tunnel?
+# does the primary reach the secondaries inside the tunnel?
 ssh -p 2400 root@10.0.0.14 "ping -c2 10.99.0.2"
 
-# AXFR funziona via tunnel?
+# does AXFR work through the tunnel?
 ssh -p 2400 root@10.0.0.14 "dig @127.0.0.1 example.com AXFR | head"
 ```
 
 ---
 
-## Gestione zone
+## Zone management
 
-### Aggiornamento con serial automatico
+### Updates with automatic serial
 
-Il playbook calcola il serial nel formato `YYYYMMDDnn`:
-- Data odierna + serial esistente → incrementa `nn`
-- Data passata → `YYYYMMDD01`
-- Aggiorna **solo le zone cambiate** (diff prima del deploy)
-- Verifica sintassi con `named-checkzone`
-- Controlla propagazione sui secondari
+The playbook computes the serial in `YYYYMMDDnn` format:
+- Today's date + existing serial → increments `nn`
+- Past date → `YYYYMMDD01`
+- Updates **only the zones that changed** (diff before deploy)
+- Syntax check with `named-checkzone`
+- Checks propagation on the secondaries
 
 ```bash
-# Tutte le zone
+# All zones
 ansible-playbook playbooks/update-zones.yml --ask-vault-pass
 
-# Zona specifica
+# A specific zone
 ansible-playbook playbooks/update-zones.yml --ask-vault-pass \
   -e "zone_name=example.com"
 
-# Forza reload
+# Force reload
 ansible-playbook playbooks/update-zones.yml --ask-vault-pass \
   -e "force_serial=true"
 ```
 
-### Aggiungere una zona
+### Adding a zone
 
-1. Crea `zones/nuova-zona.com.yml`
-2. Aggiungi in `inventory/group_vars/all/main.yml`:
+1. Create `zones/new-zone.com.yml`
+2. Add to `inventory/group_vars/all/main.yml`:
    ```yaml
    dns_zones:
-     - name: "nuova-zona.com"
-       file: "zones/nuova-zona.com.yml"
+     - name: "new-zone.com"
+       file: "zones/new-zone.com.yml"
        type: master
        ddns_enabled: false
    ```
@@ -876,111 +883,111 @@ ansible-playbook playbooks/update-zones.yml --ask-vault-pass \
 
 ### TLSA (DANE)
 
-Ogni zona supporta una lista `tlsa` (vedi `zones/example.com.yml`). Con `usage: 3, selector: 1, matching: 1` (DANE-EE della chiave pubblica) l'hash si ricava dal certificato acme.sh in uso:
+Every zone supports a `tlsa` list (see `zones/example.com.yml`). With `usage: 3, selector: 1, matching: 1` (DANE-EE of the public key) the hash is derived from the acme.sh certificate in use:
 
 ```bash
-openssl x509 -in /etc/ssl/acme/<dominio>.fullchain.pem -noout -pubkey \
+openssl x509 -in /etc/ssl/acme/<domain>.fullchain.pem -noout -pubkey \
   | openssl pkey -pubin -outform DER \
   | openssl dgst -sha256
 ```
 
-Record consigliati per un host web+mail (stesso certificato, stesso hash su tutte le porte):
+Recommended records for a web+mail host (same certificate, same hash on every port):
 
-| Owner name              | Servizio          | Perché |
-|--------------------------|-------------------|--------|
-| `_443._tcp.www`          | HTTPS             | validazione standard del certificato web |
-| `_25._tcp.mail`          | SMTP (MTA-to-MTA) | STARTTLS è opportunistico e vulnerabile a downgrade/stripping; il TLSA (RFC 7672) forza i mittenti che supportano DANE (Postfix `smtp_tls_security_level=dane`, Exim, ecc.) a rifiutare la consegna in chiaro invece di degradare silenziosamente |
-| `_587._tcp.mail`         | Submission        | TLS implicito/mandatorio |
-| `_465._tcp.mail`         | SMTPS             | TLS implicito |
-| `_993._tcp.mail`         | IMAPS             | TLS implicito |
-| `_995._tcp.mail`         | POP3S             | TLS implicito |
+| Owner name              | Service           | Why |
+|--------------------------|-------------------|-----|
+| `_443._tcp.www`          | HTTPS             | standard web certificate validation |
+| `_25._tcp.mail`          | SMTP (MTA-to-MTA) | STARTTLS is opportunistic and vulnerable to downgrade/stripping; the TLSA record (RFC 7672) forces DANE-capable senders (Postfix `smtp_tls_security_level=dane`, Exim, etc.) to refuse cleartext delivery instead of silently degrading |
+| `_587._tcp.mail`         | Submission        | implicit/mandatory TLS |
+| `_465._tcp.mail`         | SMTPS             | implicit TLS |
+| `_993._tcp.mail`         | IMAPS             | implicit TLS |
+| `_995._tcp.mail`         | POP3S             | implicit TLS |
 
-Non pubblicare TLSA su porte STARTTLS lato client (`_110._tcp`, `_143._tcp`, POP3/IMAP in chiaro): i client mail non validano DANE su queste porte, a differenza degli MTA in consegna SMTP — sarebbe un record senza alcun effetto pratico.
+Do not publish TLSA on client-side STARTTLS ports (`_110._tcp`, `_143._tcp`, cleartext POP3/IMAP): mail clients do not validate DANE on those ports, unlike MTAs delivering SMTP — it would be a record with no practical effect.
 
-Se la chiave del certificato cambia (nuovo keypair, non solo rinnovo con stessa chiave), l'hash va rigenerato e ridistribuito su tutti gli owner name che lo referenziano.
+If the certificate key changes (a new keypair, not just a renewal with the same key), the hash must be regenerated and redistributed to every owner name that references it.
 
 ---
 
 ## DNSSEC
 
-### Configurazione automatica
+### Automatic configuration
 
-BIND 9.20 con `dnssec-policy` gestisce tutto:
+BIND 9.20 with `dnssec-policy` handles everything:
 
-| Parametro | Valore | Note |
+| Parameter | Value | Notes |
 |---|---|---|
-| Algoritmo | Ed25519 | Chiavi da 32 byte |
-| KSK lifetime | 1 anno | Rotazione automatica |
-| ZSK lifetime | 90 giorni | Rotazione automatica |
+| Algorithm | Ed25519 | 32-byte keys |
+| KSK lifetime | 1 year | Automatic rotation |
+| ZSK lifetime | 90 days | Automatic rotation |
 | NSEC3 iterations | 0 | RFC 9276 |
-| Signature validity | 14 giorni | Rinnovo 3gg prima |
+| Signature validity | 14 days | Renewed 3 days early |
 
-### DS record — cosa sono e dove vanno
+### DS records — what they are and where they go
 
-Il **DS record** (Delegation Signer) è un hash della tua KSK (Key Signing Key). Va inserito nel **pannello del registrar** dove hai registrato il dominio (Aruba, Register.it, Namecheap, ecc.) nella sezione "DNSSEC" o "DS Records". Crea la **chain of trust**: senza di esso DNSSEC è configurato ma non verificabile dai resolver pubblici.
+The **DS record** (Delegation Signer) is a hash of your KSK (Key Signing Key). It must be entered in the **registrar's panel** where the domain is registered (Aruba, Register.it, Namecheap, etc.), in the "DNSSEC" or "DS Records" section. It creates the **chain of trust**: without it DNSSEC is configured but not verifiable by public resolvers.
 
-> **Eccezione**: le zone subdomain (es. `dyn.example.com`) non vanno al registrar. Il loro DS record è gestito automaticamente da BIND nella zona padre (`example.com`).
+> **Exception**: subdomain zones (e.g. `dyn.example.com`) do not go to the registrar. Their DS record is managed automatically by BIND inside the parent zone (`example.com`).
 
-### Come ottenere i DS record
+### How to get the DS records
 
 ```bash
 make dnssec
 ```
 
-Il playbook stampa per ogni zona:
+The playbook prints, for each zone:
 
 ```
 ninux-nnxx.it. IN DS 24729 15 2 B73CAF4FE07BE64E...
 ```
 
-I campi da inserire al registrar sono:
+The fields to enter at the registrar are:
 
-| Campo registrar | Dove trovarlo nell'output |
+| Registrar field | Where to find it in the output |
 |---|---|
-| **Key Tag** (o Key ID) | primo numero dopo `DS` — es. `24729` |
-| **Algorithm** | secondo numero — `15` = Ed25519 |
-| **Digest Type** | terzo numero — `2` = SHA-256 |
-| **Digest** | stringa esadecimale finale |
+| **Key Tag** (or Key ID) | first number after `DS` — e.g. `24729` |
+| **Algorithm** | second number — `15` = Ed25519 |
+| **Digest Type** | third number — `2` = SHA-256 |
+| **Digest** | final hexadecimal string |
 
-### Inserimento al registrar
+### Entering it at the registrar
 
-Ogni registrar ha un'interfaccia diversa, ma i campi sono sempre gli stessi. Esempio per un dominio con algoritmo Ed25519:
+Every registrar has a different interface, but the fields are always the same. Example for a domain using Ed25519:
 
-| Campo | Valore esempio |
+| Field | Example value |
 |---|---|
 | Key Tag | `24729` |
 | Algorithm | `15` |
 | Digest Type | `2` |
 | Digest | `B73CAF4FE07BE64E29EB7A57ABBC791D757CC5B8B0790B4DCE532352765EF729` |
 
-La propagazione richiede in genere 1–24 ore (dipende dal TTL del registro TLD).
+Propagation usually takes 1–24 hours (depending on the TLD registry TTL).
 
-### Verifica chain of trust
+### Chain of trust verification
 
 ```bash
-# Chain of trust end-to-end (dopo propagazione DS al registrar)
+# End-to-end chain of trust (after DS propagation at the registrar)
 delv @8.8.8.8 example.com SOA +rtrace
-# Output atteso: "; fully validated"
+# Expected output: "; fully validated"
 
-# Firma locale (senza aspettare la propagazione)
+# Local signing (without waiting for propagation)
 dig +dnssec example.com SOA @ns1.example.com
 
-# Stato chiavi DNSSEC e prossime rotazioni
+# DNSSEC key status and upcoming rotations
 make dnssec
 ```
 
-### Rotazione chiavi (automatica)
+### Key rotation (automatic)
 
-BIND ruota KSK e ZSK automaticamente secondo la policy. Quando avviene una **rotazione KSK** devi aggiornare il DS record al registrar con il nuovo Key Tag. Il playbook `make dnssec` mostra sempre il DS record attivo da pubblicare.
+BIND rotates KSK and ZSK automatically according to the policy. When a **KSK rotation** happens you must update the DS record at the registrar with the new Key Tag. The `make dnssec` playbook always shows the active DS record to publish.
 
 ---
 
-## DDNS — Router OpenWrt
+## DDNS — OpenWrt routers
 
-Il router aggiorna automaticamente il proprio record A ogni 5 minuti:
+The router updates its own A record automatically every 5 minutes:
 
 ```
-router-home.dyn.example.com.  60  IN  A  <IP WAN pubblico>
+router-home.dyn.example.com.  60  IN  A  <public WAN IP>
 ```
 
 ```yaml
@@ -998,18 +1005,18 @@ openwrt_routers:
 ansible-playbook playbooks/site.yml --limit openwrt_routers --ask-vault-pass
 ```
 
-Lo script rileva automaticamente CGNAT e ottiene l'IP pubblico reale.
+The script automatically detects CGNAT and obtains the real public IP.
 
 ---
 
 ## Monitoring
 
-### Accesso via SSH tunnel
+### Access via SSH tunnel
 
-Grafana, Prometheus e Alertmanager ascoltano solo su `127.0.0.1` del primary (IP privato LAN, non esposto su internet). Il role hardening abilita `PermitOpen` solo per le porte di monitoraggio.
+Grafana, Prometheus and Alertmanager listen only on the primary's `127.0.0.1` (private LAN IP, not exposed to the internet). The hardening role enables `PermitOpen` only for the monitoring ports.
 
 ```bash
-# Apri il tunnel dal tuo notebook (rimane in background con -N)
+# Open the tunnel from your laptop (stays in the background with -N)
 ssh -p 2400 -N \
     -L 3000:127.0.0.1:3000 \
     -L 9090:127.0.0.1:9090 \
@@ -1021,31 +1028,31 @@ ssh -p 2400 -N \
 # Alertmanager: http://localhost:9093
 ```
 
-Il comando SSH tunnel preciso (con IP reale) viene stampato a fine di ogni `make deploy` nella sezione **MONITORING — accesso**.
+The exact SSH tunnel command (with the real IP) is printed at the end of every `make deploy` in the **MONITORING — access** section.
 
-> Se il primary non è raggiungibile direttamente dal notebook, fai il jump via Proxmox:
+> If the primary is not directly reachable from your laptop, jump via Proxmox:
 > ```bash
 > ssh -J root@<proxmox-ip> -p 2400 -N \
 >     -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 9093:127.0.0.1:9093 \
 >     root@<primary-ip>
 > ```
 
-> **Firewall**: se non riesci a connetterti anche con il tunnel aperto, aggiungi il tuo IP a `monitoring_allowed_sources` in `group_vars/all/main.yml` e rilancia `make deploy`.
+> **Firewall**: if you cannot connect even with the tunnel open, add your IP to `monitoring_allowed_sources` in `group_vars/all/main.yml` and re-run `make deploy`.
 
-### Alert preconfigurati
+### Preconfigured alerts
 
-| Alert | Severità | Condizione |
+| Alert | Severity | Condition |
 |---|---|---|
-| `BINDDown` | critical | bind_exporter non risponde 2+ min |
-| `BINDQueryRateCritical` | critical | > 20.000 query/s |
-| `BINDSerialMismatch` | warning | serial non allineato tra nodi |
-| `DNSSECKeyExpiredCritical` | critical | chiave DNSSEC scade in < 24h |
-| `NodeDown` | critical | server non raggiungibile |
-| `DiskSpaceCritical` | critical | < 5% spazio libero |
+| `BINDDown` | critical | bind_exporter unresponsive for 2+ min |
+| `BINDQueryRateCritical` | critical | > 20,000 queries/s |
+| `BINDSerialMismatch` | warning | serial misaligned across nodes |
+| `DNSSECKeyExpiredCritical` | critical | DNSSEC key expires in < 24h |
+| `NodeDown` | critical | server unreachable |
+| `DiskSpaceCritical` | critical | < 5% free space |
 | `NTPOffsetHigh` | warning | offset > 100ms |
-| *(+7 altri)* | | |
+| *(+7 more)* | | |
 
-### Notifiche email
+### Email notifications
 
 ```yaml
 # inventory/group_vars/all/main.yml
@@ -1064,87 +1071,87 @@ vault_alertmanager_smtp_password: "app_password"
 
 ## Hardening
 
-### Moduli attivi
+### Active modules
 
-| Modulo | Descrizione |
+| Module | Description |
 |---|---|
-| `user` | Crea utente ansible, carica chiavi SSH, blocca root |
+| `user` | Creates the ansible user, loads SSH keys, locks root |
 | `ssh` | chacha20/AES-GCM, curve25519, no password auth |
-| `sysctl` | 25+ parametri kernel hardening |
-| `filesystem` | `/tmp` noexec, no core dump, permessi file sensibili |
-| `services` | Disabilita 10+ demoni inutili |
-| `sudo` | Log completo, use_pty, requiretty |
-| `auditd` | Regole CIS per file DNS, syscall critiche |
-| `banner` | Banner pre-login + MOTD dinamico |
-| `fail2ban` | SSH jail + DNS flood jail con nftables |
-| `rkhunter` | Scan notturno, aggiornamento DB settimanale |
-| `unattended_upgrades` | Solo patch sicurezza, bind9 in blacklist |
+| `sysctl` | 25+ kernel hardening parameters |
+| `filesystem` | `/tmp` noexec, no core dumps, sensitive file permissions |
+| `services` | Disables 10+ unneeded daemons |
+| `sudo` | Full logging, use_pty, requiretty |
+| `auditd` | CIS rules for DNS files, critical syscalls |
+| `banner` | Pre-login banner + dynamic MOTD |
+| `fail2ban` | SSH jail + DNS flood jail with nftables |
+| `rkhunter` | Nightly scan, weekly DB update |
+| `unattended_upgrades` | Security patches only, bind9 blacklisted |
 
 ---
 
-## Firewall nftables
+## nftables firewall
 
 ### Primary (hidden master)
 
 ```
-INPUT:  loopback, established, ICMP rate-limited, SSH, UDP/53 solo secondari+localhost
+INPUT:  loopback, established, rate-limited ICMP, SSH, UDP/53 secondaries+localhost only
 OUTPUT: throttle UDP > 512B per IP (anti-amplification)
-RAW:    anti-spoofing bogon, bypass conntrack UDP/53
+RAW:    bogon anti-spoofing, UDP/53 conntrack bypass
 ```
 
-### Secondari (VPS pubblici)
+### Secondaries (public VPS)
 
 ```
-INPUT:  UDP/53 pubblico rate-limited (30pps/IP, ban 120s), TCP/53 rate-limited,
-        AXFR TCP illimitato dal primary, SSH rate-limited
-OUTPUT: throttle UDP > 512B (anti-amplification, set dinamico amp_targets)
+INPUT:  public UDP/53 rate-limited (30pps/IP, 120s ban), rate-limited TCP/53,
+        unlimited AXFR TCP from the primary, rate-limited SSH
+OUTPUT: throttle UDP > 512B (anti-amplification, dynamic set amp_targets)
 ```
 
-### Comandi utili
+### Useful commands
 
 ```bash
-# IP bannati per DNS flood
+# IPs banned for DNS flooding
 nft list set inet filter dns_flood
 
-# Sblocca IP manualmente
+# Unban an IP manually
 nft delete element inet filter dns_flood { 1.2.3.4 }
 
-# Ruleset completo
+# Full ruleset
 nft list ruleset
 ```
 
 ---
 
-## Certificati ACME
+## ACME certificates
 
-### Come funziona
+### How it works
 
-1. acme.sh sul primary ottiene i certificati wildcard (`*.example.com` + root) via DNS-01 challenge usando `nsupdate` con la TSIG key `ddns-key`
-2. Al rinnovo (cron 02:30) o al primo deploy, il primary copia i certificati ai CT consumer via SSH (chiave ed25519 dedicata)
-3. Dopo la copia, il CT esegue il `reload_cmd` configurato (nginx, postfix, dovecot…)
+1. acme.sh on the primary obtains the wildcard certificates (`*.example.com` + apex) via DNS-01 challenge using `nsupdate` with the `ddns-key` TSIG key
+2. On renewal (02:30 cron) or first deployment, the primary copies the certificates to the consumer CTs over SSH (dedicated ed25519 key)
+3. After the copy, the CT runs the configured `reload_cmd` (nginx, postfix, dovecot…)
 
-### Configurare i domini e i CT destinatari
+### Configuring domains and target CTs
 
 ```yaml
 # inventory/group_vars/all/main.yml
 acme_deploy_key: "/root/.ssh/acme_deploy_id_ed25519"
-acme_deploy_ssh_port: 2400   # porta SSH dei CT
+acme_deploy_ssh_port: 2400   # CT SSH port
 
 acme_domains:
   - domain: "example.com"
     keylength: "ec-256"
     deploy:
-      - host: "10.0.0.16"          # CT nginx
+      - host: "10.0.0.16"          # nginx CT
         reload_cmd: "systemctl reload nginx"
-  - domain: "altro.com"
+  - domain: "other.com"
     keylength: "ec-256"
     deploy:
-      - host: "10.0.0.6"           # CT mail
+      - host: "10.0.0.6"           # mail CT
         reload_cmd: "systemctl reload postfix && systemctl reload dovecot"
 ```
 
 ```yaml
-# inventory/hosts.yml — gruppo cert_consumers
+# inventory/hosts.yml — cert_consumers group
 cert_consumers:
   hosts:
     ct-web:
@@ -1157,34 +1164,34 @@ cert_consumers:
       ansible_host: 10.0.0.6
       ansible_user: root
       ansible_port: 2400
-      cert_domain: "altro.com"
+      cert_domain: "other.com"
       cert_reload_cmd: "systemctl reload postfix && systemctl reload dovecot"
 ```
 
-### Comandi
+### Commands
 
 ```bash
-# Emette/rinnova cert E distribuisce ai CT (tutto in una run)
+# Issue/renew certs AND distribute them to the CTs (single run)
 make acme
 
-# Ricopia solo i cert già emessi ai CT (senza re-emettere)
+# Only re-copy already-issued certs to the CTs (without re-issuing)
 make cert-deploy
 
-# Rinnovo manuale forzato
+# Forced manual renewal
 make renew
 
-# Controlla i log di rinnovo automatico sul primary
+# Check the automatic renewal logs on the primary
 ssh -p 2400 root@<primary-ip> "tail -50 /var/log/acme-renew.log"
 ```
 
 ### Troubleshooting
 
 ```bash
-# Forza rinnovo manuale di un singolo dominio
+# Force a manual renewal of a single domain
 ssh -p 2400 root@<primary-ip> \
   "/opt/acme.sh/acme.sh --renew -d example.com --force --home /opt/acme.sh"
 
-# Verifica che i cert siano arrivati sul CT
+# Check the certs reached the CT
 ssh -p 2400 root@<ct-ip> "ls -la /etc/ssl/acme/"
 ssh -p 2400 root@<ct-ip> \
   "openssl x509 -noout -subject -enddate -in /etc/ssl/acme/example.com.fullchain.pem"
@@ -1194,19 +1201,19 @@ ssh -p 2400 root@<ct-ip> \
 
 ## CI/CD
 
-### Pipeline GitHub Actions
+### GitHub Actions pipeline
 
 ```
 push → lint (yamllint + ansible-lint)
-     → syntax (tutti i playbook)
+     → syntax (every playbook)
      → molecule (Docker Debian Trixie: prepare → converge → idempotency → verify)
-     → validate-zones (valida YAML zone files)
-     → security (trivy CVE + verifica vault cifrato)
+     → validate-zones (validates YAML zone files)
+     → security (trivy CVE + encrypted-vault check)
 
-tag vX.Y.Z → release (archivio + changelog automatico)
+tag vX.Y.Z → release (archive + automatic changelog)
 ```
 
-### Test in locale
+### Local testing
 
 ```bash
 yamllint .
@@ -1219,66 +1226,66 @@ molecule test
 
 ---
 
-## Operazioni giornaliere
+## Day-to-day operations
 
 ```bash
-# Aggiorna zone DNS
+# Update DNS zones
 make zones
 
-# Stato DNSSEC + DS records
+# DNSSEC status + DS records
 make dnssec
 
-# Snapshot prima di un'operazione rischiosa
+# Snapshot before a risky operation
 make snapshot
 
-# Ricopia certificati ai CT (dopo un rinnovo manuale o una nuova VM)
+# Re-copy certificates to the CTs (after a manual renewal or a new VM)
 make cert-deploy
 
-# Verifica connettività a tutti gli host
+# Check connectivity to every host
 make ping
 ```
 
-Comandi diretti utili:
+Useful direct commands:
 
 ```bash
-# Stato BIND su tutti i nodi
+# BIND status on every node
 ansible all -m command -a "systemctl status bind9" --ask-vault-pass
 
-# Serial zone correnti
+# Current zone serials
 ansible dns_primary -m command \
   -a "rndc zonestatus example.com" --ask-vault-pass
 
-# Forza zone transfer sui secondari
+# Force a zone transfer on the secondaries
 ansible dns_secondary -m command \
   -a "rndc retransfer example.com" --ask-vault-pass
 
-# IP bannati per DNS flood
+# IPs banned for DNS flooding
 ansible dns_secondary -m command \
   -a "nft list set inet filter dns_flood" --ask-vault-pass
 
-# Log rinnovo certificati
+# Certificate renewal log
 ssh -p 2400 root@<primary-ip> "tail -50 /var/log/acme-renew.log"
 
-# Snapshot con nome personalizzato
+# Snapshot with a custom name
 ansible-playbook playbooks/proxmox-snapshot.yml \
-  --ask-vault-pass -e "snap_action=create snap_name=pre-manutenzione"
+  --ask-vault-pass -e "snap_action=create snap_name=pre-maintenance"
 ```
 
-### Aggiornare BIND9
+### Upgrading BIND9
 
 ```bash
-# Testa prima su un secondario
+# Test on a secondary first
 ansible ns1 -m apt -a "name=bind9 state=latest" --ask-vault-pass
 ansible ns1 -m command -a "systemctl restart bind9" --ask-vault-pass
 dig @203.0.113.10 example.com SOA
 
-# Poi primary (crea snapshot prima)
+# Then the primary (snapshot first)
 ansible-playbook playbooks/proxmox-snapshot.yml \
   --ask-vault-pass -e "snap_action=create snap_name=pre-bind9-upgrade"
 ansible dns_primary -m apt -a "name=bind9 state=latest" --ask-vault-pass
 ansible dns_primary -m command -a "systemctl restart bind9" --ask-vault-pass
 
-# Infine gli altri secondari
+# Finally the remaining secondaries
 ansible dns_secondary -m apt -a "name=bind9 state=latest" --ask-vault-pass
 ```
 
@@ -1286,7 +1293,7 @@ ansible dns_secondary -m apt -a "name=bind9 state=latest" --ask-vault-pass
 
 ## Troubleshooting
 
-### BIND9 non si avvia
+### BIND9 does not start
 
 ```bash
 journalctl -u bind9 -n 50 --no-pager
@@ -1294,7 +1301,7 @@ named-checkconf /etc/bind/named.conf
 named-checkzone example.com /var/lib/bind/zones/db.example.com
 ```
 
-### Zone transfer non funziona
+### Zone transfers do not work
 
 ```bash
 dig @192.168.1.10 example.com AXFR
@@ -1310,96 +1317,103 @@ rndc sign example.com
 dnssec-verify -z example.com /var/lib/bind/zones/db.example.com
 ```
 
-### Certificati ACME non si rinnovano
+### ACME certificates not renewing
 
 ```bash
 /opt/acme.sh/acme.sh --renew -d example.com --force
 cat /var/log/acme-renew.log
 ```
 
-### Proxmox — clone fallisce
+### Proxmox — clone fails
 
 ```bash
-# Verifica che il template esista
+# Check the template exists
 qm status 9000
 
-# Verifica permessi token API
+# Check API token permissions
 pvesh get /access/acl
 
-# Log Proxmox
+# Proxmox logs
 journalctl -u pvedaemon -n 50
 ```
 
-### Proxmox — cloud-init non applica IP
+### Proxmox — cloud-init does not apply the IP
 
 ```bash
-# Controlla lo status cloud-init sulla VM
+# Check cloud-init status on the VM
 ssh -p 2400 root@10.0.0.14 "cloud-init status"
 ssh -p 2400 root@10.0.0.14 "cat /var/log/cloud-init.log | tail -30"
 
-# Rigenera immagine cloud-init e riavvia
+# Regenerate the cloud-init image and reboot
 qm set 200 --cicustom ""
 qm cloudinit update 200
 qm reboot 200
 ```
 
-### VM non risponde dopo creazione
+### VM unresponsive after creation
 
 ```bash
-# Verifica stato VM
+# Check VM status
 qm status 200
 
-# Console VM su Proxmox
+# VM console on Proxmox
 qm terminal 200
 
-# Log avvio
+# Boot log
 qm showcmd 200
 ```
 
 ---
 
-## Sicurezza
+## Security
 
-### Gestione secret
+### Secrets management
 
-Tutti i secret sono in `inventory/group_vars/all/vault.yml` cifrato con ansible-vault. Il file in chiaro non deve mai essere committato. Il `.gitignore` esclude il vault non cifrato.
+All secrets live in `inventory/group_vars/all/vault.yml`, encrypted with ansible-vault. The cleartext file must never be committed. `.gitignore` excludes the unencrypted vault.
 
 ```bash
-# Verifica che il vault sia cifrato
+# Check the vault is encrypted
 head -1 inventory/group_vars/all/vault.yml
-# Output atteso: $ANSIBLE_VAULT;1.1;AES256
+# Expected output: $ANSIBLE_VAULT;1.1;AES256
 ```
 
-### Rotazione chiavi TSIG
+### TSIG key rotation
 
 ```bash
 tsig-keygen -a hmac-sha256 axfr-key-new
 ansible-vault edit inventory/group_vars/all/vault.yml
 ansible-playbook playbooks/site.yml --ask-vault-pass
-dig @192.168.1.10 example.com AXFR   # verifica
+dig @192.168.1.10 example.com AXFR   # verify
 ```
 
-### Rotazione token API Proxmox
+### Proxmox API token rotation
 
-1. Crea nuovo token in Proxmox
-2. Aggiorna `vault_proxmox_token_secret` nel vault
-3. Esegui `ansible-playbook playbooks/proxmox.yml --ask-vault-pass` per verificare
-4. Revoca il vecchio token
-
----
-
-## Licenza
-
-MIT — vedi [LICENSE](LICENSE)
+1. Create a new token in Proxmox
+2. Update `vault_proxmox_token_secret` in the vault
+3. Run `ansible-playbook playbooks/proxmox.yml --ask-vault-pass` to verify
+4. Revoke the old token
 
 ---
 
-## Contribuire
+## Changelog
 
-1. Fork del repository
-2. Branch: `git checkout -b feature/nome`
+The [CHANGELOG](CHANGELOG.md) is maintained in Italian, the project's native language.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Branch: `git checkout -b feature/name`
 3. Test: `yamllint . && ansible-lint && molecule test`
-4. Commit: `git commit -m "feat: descrizione"`
-5. Pull request su `main`
+4. Commit: `git commit -m "feat: description"`
+5. Pull request against `main`
 
-I contributi devono passare l'intera pipeline CI prima del merge.
+Issues and PRs are welcome in English or Italian.
+All contributions must pass the full CI pipeline before merging.
