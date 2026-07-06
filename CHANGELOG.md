@@ -6,6 +6,11 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
+## [Unreleased]
+
+### Corretto
+- **`zones/dyn.example.com.yml`: SOA `expire` 3600 → 1209600** — con expire a 1 ora bastava 1 ora di primary irraggiungibile (tunnel giù, riavvio) perché i secondari smettessero di servire la zona DDNS: da fuori la zona *spariva* con SERVFAIL. È successo davvero sulla zona dyn reale, scoperto durante i test post-deploy v1.7.4: entrambi i secondari rispondevano "zone not loaded". Ripristinata con `rndc retransfer` e SOA corretta live via nsupdate (senza perdere i record dinamici dei router); expire ora a 14 giorni come le altre zone.
+
 ## [1.7.4] — 2026-07-06
 
 ### Corretto

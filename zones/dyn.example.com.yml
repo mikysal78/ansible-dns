@@ -14,7 +14,11 @@ zone:
     serial:     1
     refresh:    300
     retry:      60
-    expire:     3600
+    # expire ALTO anche in una zona dinamica: è il tempo dopo cui i
+    # SECONDARI smettono di servire la zona se non raggiungono il primary.
+    # Con un valore basso (es. 3600) basta 1 ora di primary irraggiungibile
+    # per far sparire la zona dai NS pubblici. 14 giorni, come le altre zone.
+    expire:     1209600
     minimum:    60
 
   ns:
