@@ -9,6 +9,14 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 ## [Unreleased]
 
 ### Corretto
+- **`acme_dns`: `--install-cert` solo se il certificato è cambiato** — acme.sh esegue *sempre* il reloadcmd insieme a `--install-cert`, quindi ogni deploy riavviava nginx/postfix/dovecot sui CT anche a certificati invariati. Ora un `cmp` confronta il cert emesso con quello installato e l'install scatta solo su rinnovo o prima installazione (forzabile con `-e acme_force_install=true`, es. dopo aver cambiato un reloadcmd).
+- **`cert-deploy.yml`: reload sui CT solo se i file sono cambiati** — stesso principio: il task di reload ora itera solo sui `reload_cmd` dei domini le cui copy (fullchain/chiave) risultano `changed`.
+
+### Aggiunto
+- **`named-checkconf` completo prima di ogni reload di BIND** (`bind9_primary/zones`, `dnssec`) — i fragment non sono validabili singolarmente con `validate: %s` (referenziano la `dnssec-policy` di `named.conf.options`): ora la config completa viene verificata subito dopo il deploy dei template, così un errore fa fallire il play *prima* che l'handler ricarichi named, che continua a servire con la config precedente.
+
+### Modificato
+- `acme-only.yml`: chiave deploy derivata da `groups['dns_primary'][0]` invece dell'hostname cablato `ns-primary` (come già fatto per il riepilogo di `site.yml`).
 - **`zones/dyn.example.com.yml`: SOA `expire` 3600 → 1209600** — con expire a 1 ora bastava 1 ora di primary irraggiungibile (tunnel giù, riavvio) perché i secondari smettessero di servire la zona DDNS: da fuori la zona *spariva* con SERVFAIL. È successo davvero sulla zona dyn reale, scoperto durante i test post-deploy v1.7.4: entrambi i secondari rispondevano "zone not loaded". Ripristinata con `rndc retransfer` e SOA corretta live via nsupdate (senza perdere i record dinamici dei router); expire ora a 14 giorni come le altre zone.
 
 ## [1.7.4] — 2026-07-06

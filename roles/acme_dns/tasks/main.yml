@@ -168,6 +168,24 @@
     NSUPDATE_KEY: "{{ acme_install_dir }}/nsupdate.key"
   loop: "{{ acme_domains }}"
 
+# --install-cert esegue SEMPRE anche il reloadcmd (reload di nginx/postfix/
+# dovecot sui CT): va lanciato solo quando il cert emesso differisce da
+# quello installato (rinnovo o prima installazione), non a ogni deploy.
+# rc di cmp: 0 = identici, 1 = diversi, 2 = file mancante (prima install).
+# Per riapplicare comunque (es. reloadcmd cambiato): -e acme_force_install=true
+- name: Confronta il certificato emesso con quello installato
+  ansible.builtin.command:
+    cmd: >
+      cmp -s
+      {{ acme_certs_dir }}/{{ item.domain }}_ecc/fullchain.cer
+      {{ acme_certs_dir }}/{{ item.domain }}.fullchain.pem
+  loop: "{{ acme_domains }}"
+  loop_control:
+    label: "{{ item.domain }}"
+  register: acme_cert_diff
+  changed_when: false
+  failed_when: false
+
 - name: Installa certificati nelle directory finali
   ansible.builtin.command:
     cmd: >
@@ -179,7 +197,13 @@
       --reloadcmd  "{{ (acme_install_dir ~ '/deploy-' ~ item.domain ~ '.sh') if item.deploy is defined else acme_reload_cmd }}"
       --home {{ acme_install_dir }}
   loop: "{{ acme_domains }}"
-  changed_when: false
+  loop_control:
+    label: "{{ item.domain }}"
+    index_var: _acme_idx
+  when: >-
+    acme_cert_diff.results[_acme_idx].rc != 0
+    or (acme_force_install | default(false) | bool)
+  changed_when: true
 
 # Il log dei rinnovi cresce all'infinito senza rotazione: 6 mesi bastano
 # per diagnosticare un rinnovo fallito (i cert durano 90 giorni).

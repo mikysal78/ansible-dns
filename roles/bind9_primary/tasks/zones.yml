@@ -22,6 +22,15 @@
     mode: "0640"
   notify: reload bind9
 
+# Il fragment da solo non è validabile con `validate: %s` (referenzia la
+# dnssec-policy definita in named.conf.options): si valida la config
+# COMPLETA subito dopo il deploy. Se è rotta il play fallisce QUI, prima
+# che l'handler ricarichi named — che continua a girare con la vecchia.
+- name: Verifica la configurazione BIND completa (prima del reload)
+  ansible.builtin.command:
+    cmd: named-checkconf
+  changed_when: false
+
 - name: Rileva host con IP misti pubblico/privato (avviso)
   ansible.builtin.set_fact:
     mixed_ip_hosts: "{{ lookup('template', 'mixed_ip_warnings.j2') | from_yaml }}"

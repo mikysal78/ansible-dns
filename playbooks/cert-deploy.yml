@@ -58,6 +58,7 @@
       loop: "{{ _my_certs }}"
       loop_control:
         label: "{{ item.domain }}"
+      register: _fullchain_copy
 
     - name: Copia chiave privata
       ansible.builtin.copy:
@@ -69,8 +70,15 @@
       loop: "{{ _my_certs }}"
       loop_control:
         label: "{{ item.domain }}"
+      register: _key_copy
 
-    - name: Ricarica i servizi per i domini distribuiti
-      ansible.builtin.shell: "{{ item }}" # noqa: command-instead-of-shell no-changed-when
+    # Reload SOLO per i domini i cui file sono effettivamente cambiati:
+    # rilanciare il playbook con cert già aggiornati non deve riavviare
+    # nginx/postfix/dovecot per niente.
+    - name: Ricarica i servizi per i domini distribuiti (solo se i cert sono cambiati)
+      ansible.builtin.shell: "{{ item }}" # noqa: command-instead-of-shell
       changed_when: true
-      loop: "{{ _my_certs | map(attribute='reload_cmd') | unique | list }}"
+      loop: >-
+        {{ (_fullchain_copy.results | default([]) + _key_copy.results | default([]))
+           | selectattr('changed')
+           | map(attribute='item.reload_cmd') | unique | list }}

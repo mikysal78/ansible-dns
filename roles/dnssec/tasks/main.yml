@@ -54,6 +54,14 @@
     mode: "0640"
   notify: reload bind9
 
+# I fragment non sono validabili singolarmente (named.conf.local referenzia
+# la dnssec-policy di named.conf.options): si valida la config completa
+# prima di applicare i reload.
+- name: Verifica la configurazione BIND completa (prima del reload)
+  ansible.builtin.command:
+    cmd: named-checkconf
+  changed_when: false
+
 # Applica subito gli eventuali reload notificati dai template sopra:
 # se le config non sono cambiate non succede nulla (niente reload
 # inutile a ogni run), se sono cambiate BIND ricarica ORA e la

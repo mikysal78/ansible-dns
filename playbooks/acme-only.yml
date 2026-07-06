@@ -17,8 +17,8 @@
     - name: Autorizza chiave SSH del primary per deploy certificati
       ansible.posix.authorized_key:
         user: root
-        key: "{{ hostvars['ns-primary']['acme_deploy_pubkey'] }}"
-        comment: "acme-deploy@ns-primary"
+        key: "{{ hostvars[groups['dns_primary'][0]]['acme_deploy_pubkey'] }}"
+        comment: "acme-deploy@{{ groups['dns_primary'][0] }}"
         state: present
 
 - name: Copia certificati dal primary ai CT consumer
