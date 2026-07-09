@@ -24,3 +24,11 @@
         # Tutto il resto su porta 53 viene droppato silenziosamente
         udp dport 53 drop
         tcp dport 53 drop
+{% set _mon_ips = groups['monitoring_server'] | default([])
+                  | map('extract', hostvars, 'wg_address') | select('defined') | list %}
+{% if _mon_ips | length > 0 %}
+
+        # Exporter Prometheus (node/bind): solo dal monitoring server via WireGuard
+        tcp dport { {{ node_exporter_port | default(9100) }}, {{ bind_exporter_port | default(9119) }} } \
+            ip saddr { {{ _mon_ips | join(', ') }} } accept
+{% endif %}

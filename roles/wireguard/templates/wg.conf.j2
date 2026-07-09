@@ -43,4 +43,30 @@ PersistentKeepalive = {{ wg_keepalive }}
 PublicKey = {{ hostvars[primary]['wg_public_key'] }}
 AllowedIPs = {{ hostvars[primary]['wg_address'] }}/32
 
+{% if 'monitoring_server' in group_names %}
+{# Il monitoring server scrapa gli exporter dei secondari: peer diretti
+   con endpoint pubblico + keepalive (il CT è dietro NAT, si connette lui) #}
+{% for host in groups['dns_secondary'] | default([]) %}
+# Peer: {{ host }} (secondario — target scraping Prometheus)
+[Peer]
+PublicKey = {{ hostvars[host]['wg_public_key'] }}
+Endpoint = {{ hostvars[host]['ansible_host'] }}:{{ wg_port }}
+AllowedIPs = {{ hostvars[host]['wg_address'] }}/32
+PersistentKeepalive = {{ wg_keepalive }}
+
+{% endfor %}
+{% endif %}
+{% if 'dns_secondary' in group_names %}
+{# I secondari accettano il monitoring server come peer roaming
+   (dietro NAT, nessun endpoint: si connette lui, come il primary) #}
+{% for host in groups['monitoring_server'] | default([]) %}
+{% if hostvars[host]['wg_address'] is defined %}
+# Peer: {{ host }} (monitoring — scrapa gli exporter via tunnel)
+[Peer]
+PublicKey = {{ hostvars[host]['wg_public_key'] }}
+AllowedIPs = {{ hostvars[host]['wg_address'] }}/32
+
+{% endif %}
+{% endfor %}
+{% endif %}
 {% endif %}

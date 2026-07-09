@@ -1,0 +1,15 @@
+# /etc/nftables.d/dns.nft — Regole per MONITORING SERVER (CT dedicato)
+# Generato da Ansible — NON MODIFICARE MANUALMENTE
+#
+# Il CT ospita Prometheus + Alertmanager + Grafana dietro nginx (:80):
+# i servizi ascoltano solo su loopback, il proxy è raggiungibile solo
+# da monitoring_allowed_sources (LAN), lo scraping degli host DNS esce
+# attraverso il tunnel WireGuard.
+
+        # Reverse proxy nginx (vhost grafana/prometheus/alertmanager)
+        tcp dport {{ monitoring_proxy_port | default(80) }} \
+            ip saddr { {{ monitoring_allowed_sources | join(', ') }} } \
+            ct state new accept
+
+        # WireGuard: handshake in ingresso dal primary (LAN)
+        udp dport {{ wg_port | default(51820) }} accept

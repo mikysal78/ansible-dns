@@ -34,7 +34,7 @@
       tags: [nftables]
     - role: bind9_primary   # BIND9 hidden master + zone files
     - role: dnssec          # inline signing DNSSEC
-    - role: monitoring      # monitoring
+    - role: monitoring      # exporter (node+bind) — lo stack gira su ct-monitoring
     - role: acme_dns       # DNS-01 via nsupdate locale → propagazione ai secondari pubblici
 
 # serial: 1 → i secondari vengono aggiornati UNO alla volta: se un
@@ -49,6 +49,20 @@
     - role: nftables        # firewall (secondari: pubblico con rate limiting)
     - role: bind9_secondary
       tags: [bind9_secondary]
+    - role: monitoring      # exporter (node+bind), scrapati da ct-monitoring via wg
+
+# ------------------------------------------------------------
+# Stack monitoring su CT dedicato: Prometheus + Alertmanager +
+# Grafana. Scrapa gli exporter degli host DNS via WireGuard,
+# GUI raggiungibili da monitoring_allowed_sources (LAN).
+# ------------------------------------------------------------
+- name: Deploy Monitoring (CT dedicato)
+  hosts: monitoring_server
+  become: true
+  tags: [monitoring]
+  roles:
+    - role: nftables        # firewall (GUI solo dalla LAN autorizzata)
+    - role: monitoring      # Prometheus + Alertmanager + Grafana + node_exporter
 
 - name: Configura DDNS su router OpenWrt
   hosts: openwrt_routers
@@ -72,10 +86,8 @@
     _primary_host: "{{ groups['dns_primary'][0] }}"
     _primary: "{{ hostvars[_primary_host]['ansible_host'] }}"
     _ssh_port: "{{ hostvars[_primary_host]['ansible_port'] | default(2400) }}"
-    # Porte monitoring (da roles/monitoring/defaults/main.yml)
-    _grafana_port: 3000
-    _prometheus_port: 9090
-    _alertmanager_port: 9093
+    _monitoring_host: "{{ groups['monitoring_server'][0] | default('') }}"
+    _monitoring: "{{ hostvars[_monitoring_host]['ansible_host'] if _monitoring_host else '-' }}"
     # Chiavi vault da mostrare
     _vault_keys:
       - vault_tsig_secret
@@ -112,26 +124,17 @@
     - name: "MONITORING — accesso"
       ansible.builtin.debug:
         msg:
-          - "Grafana:        http://{{ _primary }}:{{ _grafana_port }}"
+          - "Monitoring server: {{ _monitoring_host | default('non configurato') }} ({{ _monitoring }})"
+          - "Grafana:        http://{{ grafana_domain | default('-') }}/"
           - "  utente:       {{ grafana_admin_user | default('admin') }}"
           - "  password:     {{ vault_grafana_admin_password
                                 if (reveal_secrets | bool)
                                 else '*** (usa -e reveal_secrets=false per nascondere)' }}"
-          - "Prometheus:     http://{{ _primary }}:{{ _prometheus_port }}"
-          - "Alertmanager:   http://{{ _primary }}:{{ _alertmanager_port }}"
+          - "Prometheus:     http://{{ prometheus_domain | default('-') }}/"
+          - "Alertmanager:   http://{{ alertmanager_domain | default('-') }}/"
           - ""
-          - "Accesso da notebook (SSH tunnel):"
-          - "  ssh -p {{ _ssh_port }} -N \\"
-          - "    -L {{ _grafana_port }}:127.0.0.1:{{ _grafana_port }} \\"
-          - "    -L {{ _prometheus_port }}:127.0.0.1:{{ _prometheus_port }} \\"
-          - "    -L {{ _alertmanager_port }}:127.0.0.1:{{ _alertmanager_port }} \\"
-          - "    root@{{ _primary }}"
-          - "  Poi apri: http://localhost:{{ _grafana_port }}"
-          - ""
-          - "NOTA: nftables limita l'accesso a monitoring_allowed_sources."
-          - "      Se non usi il tunnel, aggiungi il tuo IP in"
-          - "      group_vars/all/main.yml → monitoring_allowed_sources"
-          - "      e rilancia: make deploy"
+          - "NOTA: nginx sul CT smista per nome host (:80); nftables limita"
+          - "      l'accesso alle sorgenti in monitoring_allowed_sources."
 
     - name: "MONITORING — SMTP alerts"
       ansible.builtin.debug:

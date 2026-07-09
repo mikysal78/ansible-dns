@@ -26,6 +26,11 @@
     url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
     dest: "/tmp/alertmanager-{{ alertmanager_version }}.tar.gz"
     mode: "0644"
+    timeout: 60
+  register: _download
+  retries: 3
+  delay: 5
+  until: _download is succeeded
 
 - name: Estrai Alertmanager
   ansible.builtin.unarchive:

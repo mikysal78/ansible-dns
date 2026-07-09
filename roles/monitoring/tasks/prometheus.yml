@@ -28,6 +28,11 @@
     url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
     dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
     mode: "0644"
+    timeout: 60
+  register: _download
+  retries: 3
+  delay: 5
+  until: _download is succeeded
 
 - name: Estrai Prometheus
   ansible.builtin.unarchive:

@@ -38,6 +38,32 @@ all:
           ansible_become: true
           dns_secondary_index: 2
 
+    # CT dedicato allo stack di monitoring (Prometheus+Alertmanager+Grafana
+    # dietro nginx :80). Peer WireGuard: scrapa gli exporter via tunnel.
+    # Requisiti: Debian Trixie, CT unprivileged con nesting=1, 2GB RAM, 20GB.
+    monitoring_server:
+      hosts:
+        ct-monitoring:
+          ansible_host: 10.0.0.7
+          ansible_user: root
+          ansible_port: 2400
+          ansible_become: true
+          wg_address: 10.99.0.6
+
+    # Host non-DNS che devono raggiungere il primary via WireGuard
+    # (es. Proxmox/PBS per l'ACME built-in via nsupdate).
+    # monitoring_server ci finisce come children: è peer per lo scraping.
+    wg_extra_peers:
+      children:
+        proxmox:
+        monitoring_server:
+      hosts: {}
+        # pbs:
+        #   ansible_host: 10.0.0.4
+        #   ansible_user: root
+        #   ansible_become: true
+        #   wg_address: 10.99.0.5
+
     # CT Proxmox che ricevono i certificati dal primary via deploy script
     # cert_domain: dominio il cui cert deve arrivare su questo CT
     # cert_reload_cmd: comando da eseguire dopo aver copiato il cert

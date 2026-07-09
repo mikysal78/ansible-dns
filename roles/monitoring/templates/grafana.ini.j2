@@ -2,16 +2,16 @@
 # Generato da Ansible — NON MODIFICARE MANUALMENTE
 
 [server]
-http_addr = 127.0.0.1
+http_addr = {{ monitoring_gui_listen_addr }}
 http_port = {{ grafana_port }}
 domain = {{ grafana_domain }}
-root_url = https://{{ grafana_domain }}/
+root_url = {{ grafana_root_url }}
 
 [security]
 admin_user = {{ grafana_admin_user }}
 admin_password = {{ grafana_admin_password }}
 disable_gravatar = true
-cookie_secure = true
+cookie_secure = {{ grafana_cookie_secure | lower }}
 cookie_samesite = strict
 strict_transport_security = true
 x_content_type_options = true

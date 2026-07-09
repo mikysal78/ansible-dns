@@ -34,9 +34,11 @@
     group: root
     mode: "0700"
 
-- name: Deploy regole specifiche per ruolo DNS
+- name: Deploy regole specifiche per ruolo
   ansible.builtin.template:
-    src: "nftables-dns-{{ 'primary' if 'dns_primary' in group_names else 'secondary' }}.nft.j2"
+    src: "nftables-dns-{{ 'primary' if 'dns_primary' in group_names
+                          else ('monitoring' if 'monitoring_server' in group_names
+                          else 'secondary') }}.nft.j2"
     dest: /etc/nftables.d/dns.nft
     owner: root
     group: root

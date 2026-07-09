@@ -1,0 +1,40 @@
+---
+# ============================================================
+# TASK — nginx.yml
+# Reverse proxy sul monitoring server: espone Grafana/Prometheus/
+# Alertmanager sulla :80 smistando per nome host, i servizi
+# restano in ascolto solo su loopback.
+# ============================================================
+
+- name: Installa nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+
+- name: Deploy vhost monitoring
+  ansible.builtin.template:
+    src: nginx-monitoring.conf.j2
+    dest: /etc/nginx/sites-available/monitoring.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Abilita vhost monitoring
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/monitoring.conf
+    dest: /etc/nginx/sites-enabled/monitoring.conf
+    state: link
+  notify: reload nginx
+
+- name: Rimuovi il vhost di default
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Abilita e avvia nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started

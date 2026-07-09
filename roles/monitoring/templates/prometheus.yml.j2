@@ -1,5 +1,10 @@
 # /opt/prometheus/prometheus.yml
 # Generato da Ansible — NON MODIFICARE MANUALMENTE
+#
+# Gira sul monitoring server (CT dedicato): gli exporter degli host
+# DNS vengono scrapati attraverso il tunnel WireGuard (mai via IP
+# pubblico), Alertmanager è locale.
+{% set _primary = groups['dns_primary'][0] %}
 
 global:
   scrape_interval:     {{ prometheus_scrape_interval }}
@@ -24,40 +29,45 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:{{ prometheus_port }}"]
 
-  # --- node_exporter: tutti i server DNS ---
+  # --- node_exporter: monitoring server + tutti i server DNS (via wg) ---
   - job_name: "node"
     static_configs:
       - targets:
-          - "{{ dns_primary_ip }}:{{ node_exporter_port }}"
           - "localhost:{{ node_exporter_port }}"
         labels:
-          role: "dns_primary"
-{% for ip in dns_secondary_ips %}
+          role: "monitoring"
+          instance: "{{ inventory_hostname }}"
       - targets:
-          - "{{ ip }}:{{ node_exporter_port }}"
+          - "{{ hostvars[_primary]['wg_address'] }}:{{ node_exporter_port }}"
+        labels:
+          role: "dns_primary"
+          instance: "primary"
+{% for host in groups['dns_secondary'] %}
+      - targets:
+          - "{{ hostvars[host]['wg_address'] }}:{{ node_exporter_port }}"
         labels:
           role: "dns_secondary"
-          instance: "ns{{ loop.index }}"
+          instance: "{{ host }}"
 {% endfor %}
 
-  # --- bind_exporter: primary ---
+  # --- bind_exporter: primary (via wg) ---
   - job_name: "bind_primary"
     static_configs:
       - targets:
-          - "localhost:{{ bind_exporter_port }}"
+          - "{{ hostvars[_primary]['wg_address'] }}:{{ bind_exporter_port }}"
         labels:
           role: "dns_primary"
           instance: "primary"
 
-  # --- bind_exporter: secondari ---
+  # --- bind_exporter: secondari (via wg) ---
   - job_name: "bind_secondary"
     static_configs:
-{% for ip in dns_secondary_ips %}
+{% for host in groups['dns_secondary'] %}
       - targets:
-          - "{{ ip }}:{{ bind_exporter_port }}"
+          - "{{ hostvars[host]['wg_address'] }}:{{ bind_exporter_port }}"
         labels:
           role: "dns_secondary"
-          instance: "ns{{ loop.index }}"
+          instance: "{{ host }}"
 {% endfor %}
 
   # --- alertmanager ---

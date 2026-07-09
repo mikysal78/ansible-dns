@@ -16,6 +16,11 @@
     url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
     dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
     mode: "0644"
+    timeout: 60
+  register: _download
+  retries: 3
+  delay: 5
+  until: _download is succeeded
 
 - name: Estrai node_exporter
   ansible.builtin.unarchive:

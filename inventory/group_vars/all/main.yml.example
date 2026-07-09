@@ -115,3 +115,20 @@ proxmox_primary_gw:    "10.0.0.5"
 # hardening_ssh_permit_open:
 #   - "127.0.0.1:3000"
 #   - "127.0.0.1:9090"
+
+# nftables deve aprire la porta SSH reale (hardening la sposta su 2400)
+# nft_ssh_port: "{{ hardening_ssh_port }}"
+
+# --- Monitoring (CT dedicato: ct-monitoring) ---
+# Sorgenti autorizzate alle GUI Grafana/Prometheus/Alertmanager
+# (nftables sul CT; i servizi ascoltano solo su loopback dietro nginx :80)
+monitoring_allowed_sources:
+  - "127.0.0.1"
+  - "10.0.0.0/24"     # LAN di gestione
+
+# Le GUI rispondono senza porta: nginx smista per nome host.
+# DNS: grafana → A <ip del CT>, prometheus/alertmanager → CNAME grafana
+grafana_domain: "grafana.example.com"
+grafana_root_url: "http://grafana.example.com/"
+prometheus_domain: "prometheus.example.com"
+alertmanager_domain: "alertmanager.example.com"

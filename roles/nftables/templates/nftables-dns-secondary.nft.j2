@@ -34,3 +34,15 @@
         # Loopback DNS
         udp dport 53 iif lo accept
         tcp dport 53 iif lo accept
+
+        # WireGuard: handshake in ingresso da primary e monitoring server
+        # (entrambi dietro NAT → sorgente non prevedibile; autentica la crypto wg)
+        udp dport {{ wg_port | default(51820) }} accept
+{% set _mon_ips = groups['monitoring_server'] | default([])
+                  | map('extract', hostvars, 'wg_address') | select('defined') | list %}
+{% if _mon_ips | length > 0 %}
+
+        # Exporter Prometheus (node/bind): solo dal monitoring server via WireGuard
+        tcp dport { {{ node_exporter_port | default(9100) }}, {{ bind_exporter_port | default(9119) }} } \
+            ip saddr { {{ _mon_ips | join(', ') }} } accept
+{% endif %}

@@ -18,6 +18,11 @@
     url: "https://github.com/prometheus-community/bind_exporter/releases/download/v{{ bind_exporter_version }}/bind_exporter-{{ bind_exporter_version }}.linux-amd64.tar.gz"
     dest: "/tmp/bind_exporter-{{ bind_exporter_version }}.tar.gz"
     mode: "0644"
+    timeout: 60
+  register: _download
+  retries: 3
+  delay: 5
+  until: _download is succeeded
 
 - name: Estrai bind_exporter
   ansible.builtin.unarchive:

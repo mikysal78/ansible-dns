@@ -12,7 +12,7 @@ ExecStart=/usr/local/bin/prometheus \
   --storage.tsdb.path={{ prometheus_data_dir }} \
   --storage.tsdb.retention.time={{ prometheus_retention }} \
   --storage.tsdb.retention.size={{ prometheus_retention_size }} \
-  --web.listen-address="127.0.0.1:{{ prometheus_port }}" \
+  --web.listen-address="{{ monitoring_gui_listen_addr }}:{{ prometheus_port }}" \
   --web.enable-lifecycle \
   --web.enable-admin-api \
   --log.level=warn

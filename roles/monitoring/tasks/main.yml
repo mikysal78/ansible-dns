@@ -1,6 +1,8 @@
 ---
 # ============================================================
 # TASKS — monitoring (orchestratore)
+# Host DNS (primary+secondari): exporter + statistiche BIND.
+# Monitoring server (CT dedicato): Prometheus/Alertmanager/Grafana.
 # ============================================================
 
 - name: "[monitoring] Installa dipendenze"
@@ -11,6 +13,7 @@
       - musl
       - wget
       - curl
+      - gnupg          # richiesto da apt_repository (signed-by) sui CT minimali
       - apt-transport-https
     state: present
     update_cache: true
@@ -18,20 +21,43 @@
 - name: "[monitoring] node_exporter"
   ansible.builtin.include_tasks: tasks/node_exporter.yml
 
-- name: "[monitoring] bind_exporter"
+- name: "[monitoring] bind_exporter (solo host DNS)"
   ansible.builtin.include_tasks: tasks/bind_exporter.yml
+  when: "'dns_primary' in group_names or 'dns_secondary' in group_names"
 
-- name: "[monitoring] Prometheus (solo primary)"
+- name: "[monitoring] Prometheus (solo monitoring server)"
   ansible.builtin.include_tasks: tasks/prometheus.yml
-  when: "'dns_primary' in group_names"
+  when: "'monitoring_server' in group_names"
 
-- name: "[monitoring] Alertmanager (solo primary)"
+- name: "[monitoring] Alertmanager (solo monitoring server)"
   ansible.builtin.include_tasks: tasks/alertmanager.yml
-  when: "'dns_primary' in group_names"
+  when: "'monitoring_server' in group_names"
 
-- name: "[monitoring] Grafana (solo primary)"
+- name: "[monitoring] Grafana (solo monitoring server)"
   ansible.builtin.include_tasks: tasks/grafana.yml
-  when: "'dns_primary' in group_names"
+  when: "'monitoring_server' in group_names"
 
-- name: "[monitoring] Configura BIND9 per statistiche HTTP"
+- name: "[monitoring] Reverse proxy nginx (solo monitoring server)"
+  ansible.builtin.include_tasks: tasks/nginx.yml
+  when: "'monitoring_server' in group_names"
+
+- name: "[monitoring] Configura BIND9 per statistiche HTTP (solo host DNS)"
   ansible.builtin.include_tasks: tasks/bind_stats.yml
+  when: "'dns_primary' in group_names or 'dns_secondary' in group_names"
+
+# ------------------------------------------------------------
+# Migrazione: lo stack girava sul primary — ferma e disabilita
+# i vecchi servizi (i dati in /var/lib/{prometheus,grafana}
+# restano su disco finché non si decide di rimuoverli).
+# ------------------------------------------------------------
+- name: "[monitoring] Ferma stack legacy sul primary (migrato su CT)"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - prometheus
+    - alertmanager
+    - grafana-server
+  failed_when: false
+  when: "'dns_primary' in group_names"

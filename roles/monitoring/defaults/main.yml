@@ -1,8 +1,9 @@
 ---
 # ============================================================
 # DEFAULTS — monitoring
-# Prometheus + bind_exporter + node_exporter + Alertmanager
-# Gira sul primary; i secondari espongono solo gli exporter
+# Prometheus + Alertmanager + Grafana girano sul CT dedicato
+# (gruppo monitoring_server); gli host DNS espongono solo gli
+# exporter, raggiunti via WireGuard.
 # ============================================================
 
 # --- Versioni (aggiorna qui per upgradare) ---
@@ -18,6 +19,17 @@ node_exporter_port: 9100
 bind_exporter_port: 9119
 alertmanager_port: 9093
 grafana_port: 3000
+
+# --- Indirizzi di ascolto ---
+# Exporter sugli host DNS: 0.0.0.0 (nftables limita l'accesso al solo
+# IP WireGuard del monitoring server). Binding su tutte le interfacce
+# = l'exporter parte anche se wg0 non è ancora su.
+exporter_listen_addr: "0.0.0.0"
+# GUI (Prometheus/Alertmanager/Grafana) sul CT: solo loopback —
+# l'accesso dalla LAN passa dal reverse proxy nginx sulla :80,
+# che smista per nome host (grafana/prometheus/alertmanager).
+monitoring_gui_listen_addr: "127.0.0.1"
+monitoring_proxy_port: 80
 
 # --- Directory ---
 prometheus_dir: "/opt/prometheus"
@@ -49,14 +61,22 @@ alertmanager_webhook_url: "https://hooks.slack.com/services/CHANGE_ME"
 # --- Grafana ---
 grafana_admin_user: "admin"
 grafana_admin_password: "{{ vault_grafana_admin_password | default('CHANGE_ME') }}"
-grafana_domain: "grafana.example.com"
+grafana_domain: "{{ ansible_host | default('grafana.example.com') }}"
+# Accesso HTTP diretto dalla LAN (niente TLS): root_url con IP e
+# cookie_secure disattivato, altrimenti il login via http non funziona.
+grafana_root_url: "http://{{ grafana_domain }}/"
+grafana_cookie_secure: false
 grafana_allow_anonymous: false
 
-# --- IP autorizzati ad accedere a Prometheus/Grafana ---
-# (nftables aprirà queste porte solo da questi IP)
+# --- Domini vhost del reverse proxy nginx sul CT ---
+prometheus_domain: "prometheus.example.com"
+alertmanager_domain: "alertmanager.example.com"
+
+# --- IP autorizzati ad accedere alle GUI (Grafana/Prometheus/Alertmanager) ---
+# Usato dal template nftables del monitoring server.
 monitoring_allowed_sources:
   - "127.0.0.1"
-  # - "10.0.0.0/8"   # rete di gestione
+  # - "10.27.22.0/24"   # LAN — impostato in group_vars/all/main.yml
 
 # --- Bind exporter: porte BIND da monitorare ---
 bind_exporter_bind_stats_url: "http://localhost:8053/json/v1"

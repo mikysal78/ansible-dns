@@ -44,3 +44,8 @@
   ansible.builtin.systemd:
     name: bind9
     state: reloaded
+
+- name: reload nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded

@@ -2,7 +2,9 @@
 # ============================================================
 # /etc/nftables.conf — Ruleset principale
 # Generato da Ansible — NON MODIFICARE MANUALMENTE
-# Ruolo: {{ 'dns_primary (hidden master)' if 'dns_primary' in group_names else 'dns_secondary (VPS pubblico)' }}
+# Ruolo: {{ 'dns_primary (hidden master)' if 'dns_primary' in group_names
+            else ('monitoring server (CT)' if 'monitoring_server' in group_names
+            else 'dns_secondary (VPS pubblico)') }}
 # ============================================================
 
 flush ruleset
