@@ -4,6 +4,30 @@
 include "{{ bind_config_dir }}/tsig-axfr.key";
 include "{{ bind_config_dir }}/ddns.key";
 
+{% if bind_dnssec_policy | default('') != '' %}
+// ============================================================
+// DNSSEC Policy — definita anche qui perché named.conf.local
+// la referenzia per zona: la config deve essere valida anche
+// PRIMA che il role dnssec ridepioyi le options (named-checkconf
+// pre-reload fallirebbe tra i due role). I parametri sono gli
+// stessi default del role dnssec.
+// ============================================================
+dnssec-policy "{{ bind_dnssec_policy }}" {
+    signatures-validity          {{ dnssec_sig_validity | default('P14D') }};
+    signatures-validity-dnskey   {{ dnssec_sig_validity | default('P14D') }};
+    signatures-refresh           {{ dnssec_sig_refresh | default('P3D') }};
+
+    keys {
+        ksk lifetime {{ dnssec_ksk_lifetime | default('P1Y') }} algorithm {{ dnssec_ksk_algorithm | default('ecdsap256sha256') }};
+        zsk lifetime {{ dnssec_zsk_lifetime | default('P90D') }} algorithm {{ dnssec_zsk_algorithm | default('ecdsap256sha256') }};
+    };
+
+{% if dnssec_use_nsec3 | default(true) %}
+    nsec3param iterations {{ dnssec_nsec3_iterations | default(0) }} optout no salt-length {{ dnssec_nsec3_salt_length | default(0) }};
+{% endif %}
+};
+{% endif %}
+
 acl "secondaries" {
 {% for ip in dns_secondary_peer_ips %}
     {{ ip }};
