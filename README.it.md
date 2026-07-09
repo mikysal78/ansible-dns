@@ -53,9 +53,16 @@ Playbook Ansible completo per deployare un'infrastruttura DNS **production-ready
 │  │  • BIND9 Hidden Master (non esposto a internet)            │    │
 │  │  • DNSSEC inline signing (Ed25519, dnssec-policy)          │    │
 │  │  • acme.sh wildcard via DNS-01                             │    │
-│  │  • Prometheus + Grafana + Alertmanager                     │    │
+│  │  • exporter Prometheus (node+bind)                         │    │
 │  │  • fail2ban + nftables + auditd + rkhunter                 │    │
 │  └──────────────────────┬─────────────────────────────────────┘    │
+│                                                                     │
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │  CT monitoring (LXC) — Debian Trixie                       │    │
+│  │  Prometheus + Alertmanager + Grafana dietro nginx :80      │    │
+│  │  (un vhost per nome: grafana./prometheus./alertmanager.)   │    │
+│  │  peer WireGuard: scrapa gli exporter dentro il tunnel      │    │
+│  └────────────────────────────────────────────────────────────┘    │
 └─────────────────────────┼───────────────────────────────────────────┘
                           │  Tunnel WireGuard cifrato (10.99.0.0/24)
                           │  AXFR/IXFR (TSIG) + NOTIFY viaggiano qui dentro
@@ -162,12 +169,12 @@ Nota: `ddns-key` non è ristretta al solo record `_acme-challenge` — chi la po
 - fail2ban integrato con nftables
 
 ### Monitoring
-- Prometheus + bind_exporter + node_exporter su tutti i nodi
-- Gli exporter dei secondari sono raggiunti dal primary **via tunnel WireGuard** (non esposti su internet)
+- Stack su **CT dedicato** (gruppo `monitoring_server`): Prometheus + Alertmanager + Grafana dietro **nginx** sulla porta 80, un virtual host per servizio (niente porte da digitare)
+- bind_exporter + node_exporter su tutti i nodi DNS, scrapati **via tunnel WireGuard** (mai esposti su internet): il CT è peer della mesh
 - Grafana 13 con dashboard DNS overview + system health
 - Alertmanager con 14 alert preconfigurati (email/webhook)
 - Alert: BIND down, zone transfer failure, DDoS detection, DNSSEC key expiry
-- Grafana ascolta solo su `127.0.0.1`: accesso via tunnel SSH (vedi sezione Accesso)
+- Le GUI rispondono solo alle reti in `monitoring_allowed_sources` (nftables sul CT); i servizi ascoltano su `127.0.0.1`
 
 ### CI/CD
 - ansible-lint profilo `production` + yamllint
@@ -368,8 +375,8 @@ Lo storage `local` su Proxmox deve avere i **Content: Snippets** abilitati:
 | Risorsa | Minimo | Consigliato | Note |
 |---|---|---|---|
 | CPU | 1 vCPU | **2 vCPU** | `host` passthrough per AES-NI |
-| RAM | 1 GB | **2 GB** | Grafana (~300MB) + Prometheus (~200MB) |
-| Disco | 20 GB | **40 GB** | 15GB `/` + 20GB `/var` (Prometheus) |
+| RAM | 1 GB | **2 GB** | BIND + firma DNSSEC (lo stack monitoring gira sul CT dedicato) |
+| Disco | 20 GB | **40 GB** | 15GB `/` + log/zone (i dati Prometheus vivono sul CT monitoring) |
 | Rete | 1 NIC | 1 NIC LAN | Bridge `vmbr0`, IP statico |
 | Macchina | q35 | q35 | UEFI + TPM opzionale |
 | BIOS | OVMF | OVMF | UEFI |
@@ -752,7 +759,7 @@ ansible-playbook playbooks/site.yml --check --diff --ask-vault-pass
 
 - **INFRASTRUTTURA** — IP primary, NS1/NS2 pubblici, indirizzi WireGuard
 - **ZONE DNS** — zone attive con tipo e stato DDNS
-- **MONITORING** — URL Grafana/Prometheus/Alertmanager con credenziali e comando SSH tunnel pronto per il notebook
+- **MONITORING** — URL Grafana/Prometheus/Alertmanager (vhost nginx sul CT monitoring) con credenziali
 - **MONITORING SMTP** — stato notifiche email/webhook
 - **CERTIFICATI ACME** — file per dominio e CT destinatari
 - **CT CONSUMER** — elenco CT con cert e reload command
@@ -770,8 +777,9 @@ ansible-playbook playbooks/site.yml --ask-vault-pass -e reveal_secrets=false
 ### Ordine roles in `site.yml`
 
 ```
-packages → hardening → nftables → bind9_primary → dnssec → acme_dns → monitoring
-                                → bind9_secondary (sui secondari)
+packages → hardening → nftables → bind9_primary → dnssec → monitoring (exporter) → acme_dns
+                                → bind9_secondary → monitoring (exporter)   [sui secondari]
+           nftables → monitoring (stack completo + nginx)                   [sul CT monitoring]
 ```
 
 I secondari vengono aggiornati **uno alla volta** (`serial: 1`): durante un deploy — anche se un handler riavvia BIND o una config è rotta — uno dei due NS pubblici resta sempre in servizio.
@@ -1006,33 +1014,21 @@ Lo script rileva automaticamente CGNAT e ottiene l'IP pubblico reale.
 
 ## Monitoring
 
-### Accesso via SSH tunnel
+### Accesso
 
-Grafana, Prometheus e Alertmanager ascoltano solo su `127.0.0.1` del primary (IP privato LAN, non esposto su internet). Il role hardening abilita `PermitOpen` solo per le porte di monitoraggio.
+Lo stack gira su un **CT LXC dedicato** (gruppo inventory `monitoring_server`): i servizi ascoltano solo su `127.0.0.1` del CT e **nginx** li espone sulla porta 80 con un virtual host per nome. Basta puntare tre record DNS al CT (un A per grafana, due CNAME per gli altri) e si naviga senza porte:
 
 ```bash
-# Apri il tunnel dal tuo notebook (rimane in background con -N)
-ssh -p 2400 -N \
-    -L 3000:127.0.0.1:3000 \
-    -L 9090:127.0.0.1:9090 \
-    -L 9093:127.0.0.1:9093 \
-    root@<primary-ip>
-
-# Grafana:      http://localhost:3000   (admin / vault_grafana_admin_password)
-# Prometheus:   http://localhost:9090
-# Alertmanager: http://localhost:9093
+# Grafana:      http://grafana.<dominio>/       (admin / vault_grafana_admin_password)
+# Prometheus:   http://prometheus.<dominio>/
+# Alertmanager: http://alertmanager.<dominio>/
 ```
 
-Il comando SSH tunnel preciso (con IP reale) viene stampato a fine di ogni `make deploy` nella sezione **MONITORING — accesso**.
+I domini si impostano in `group_vars/all/main.yml` (`grafana_domain`, `prometheus_domain`, `alertmanager_domain`) e gli URL vengono stampati a fine di ogni `make deploy` nella sezione **MONITORING — accesso**.
 
-> Se il primary non è raggiungibile direttamente dal notebook, fai il jump via Proxmox:
-> ```bash
-> ssh -J root@<proxmox-ip> -p 2400 -N \
->     -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 9093:127.0.0.1:9093 \
->     root@<primary-ip>
-> ```
+> **Firewall**: l'accesso alle GUI è consentito solo dalle reti in `monitoring_allowed_sources` (`group_vars/all/main.yml`), applicate da nftables sul CT. Aggiungi lì la tua LAN/VPN e rilancia `make deploy` (o solo `ansible-playbook playbooks/site.yml --tags monitoring`).
 
-> **Firewall**: se non riesci a connetterti anche con il tunnel aperto, aggiungi il tuo IP a `monitoring_allowed_sources` in `group_vars/all/main.yml` e rilancia `make deploy`.
+> **Requisiti CT**: Debian Trixie, unprivileged con `nesting=1`, 2 vCPU / 2 GB RAM / 20 GB disco, SSH sulla stessa porta degli altri host. Il CT entra nella mesh WireGuard come peer (`wg_address` in inventory) e scrapa gli exporter di primary e secondari dentro il tunnel: nessuna porta exporter è esposta fuori da WireGuard.
 
 ### Alert preconfigurati
 
