@@ -6,10 +6,27 @@ Versioning: [Semantic Versioning](https://semver.org/lang/it/)
 
 ---
 
-## [Unreleased]
+## [1.8.0] — 2026-07-09
 
 ### Aggiunto
+- **Stack monitoring su CT dedicato** — Prometheus, Alertmanager e Grafana escono dal primary e girano su un CT LXC dedicato (nuovo gruppo inventory `monitoring_server`, esempio in `hosts.yml.example`). Il CT entra nella mesh WireGuard come peer (nuovo ramo nel template `wg.conf.j2`: peer diretti verso i secondari con endpoint pubblico + keepalive, e i secondari lo accettano come peer roaming) e scrapa gli exporter di tutti gli host DNS **dentro il tunnel** — mai via IP pubblico. Nuova play `Deploy Monitoring (CT dedicato)` in `site.yml` (tag `monitoring`), rieseguibile da sola.
+- **Reverse proxy nginx sul CT monitoring** — le tre GUI rispondono sulla porta 80 con un virtual host per nome (`grafana.`, `prometheus.`, `alertmanager.` — domini in `grafana_domain`/`prometheus_domain`/`alertmanager_domain`): niente porte da digitare, i servizi ascoltano solo su loopback. Template nftables dedicato (`nftables-dns-monitoring.nft.j2`): la :80 è raggiungibile solo dalle reti in `monitoring_allowed_sources`.
+- **Migrazione automatica dal primary** — il role monitoring ferma e disabilita lo stack legacy (`prometheus`, `alertmanager`, `grafana-server`) sugli host `dns_primary`; i dati restano su disco (`/var/lib/prometheus`, `/var/lib/grafana`) finché non si decide di rimuoverli.
+- **Retry sui download degli exporter** — `get_url` di node_exporter/bind_exporter/prometheus/alertmanager con `timeout: 60` e 3 tentativi (un timeout transitorio di GitHub non fa più fallire il deploy).
 - **README bilingue** — `README.md` ora in inglese (per la visibilità internazionale del progetto) con nota "progetto italiano 🇮🇹" e badge Made in Italy; la versione italiana originale vive in `README.it.md`. Link-bandierina in cima a entrambi. Il CHANGELOG resta in italiano, la lingua madre del progetto.
+
+### Corretto
+- **`make deploy` completo era rotto dalla v1.7.5** — `bind9_primary` riscrive `named.conf.options` *senza* la definizione della `dnssec-policy` che il suo `named.conf.local` referenzia per zona: il `named-checkconf` pre-reload (introdotto proprio in v1.7.5) falliva sempre lì, prima che il role `dnssec` potesse rideployare le options complete — lasciando su disco una config non avviabile. Ora il template options del primary definisce la policy (stessi parametri del role dnssec) quando `bind_dnssec_policy` è impostata: ogni stato intermedio del deploy è valido, qualunque sia l'ordine dei role.
+- **Gli exporter non erano mai stati installati sui secondari** — il role `monitoring` non compariva nella play dei secondari in `site.yml`: i target `node`/`bind_secondary` di Prometheus erano DOWN da sempre. Ora la play li installa e Prometheus li scrapa via WireGuard.
+- **Prometheus scrapava i secondari sugli IP pubblici** — i target sono ora derivati da `hostvars[...].wg_address` (niente più `dns_secondary_ips` pubblici nel template `prometheus.yml.j2`).
+- **La porta WireGuard non era mai aperta su nftables dei secondari** — il tunnel sopravviveva solo grazie alla entry conntrack creata prima del load del firewall: dopo un reboot del secondario l'handshake non sarebbe più passato. Aggiunta la regola `udp dport 51820 accept` (primary e monitoring CT sono dietro NAT: sorgente non prevedibile, autentica la crypto WireGuard).
+- **nftables apriva SSH sulla porta 22, ma sshd gira sulla 2400** — `nft_ssh_port` ora segue `hardening_ssh_port` (esempio in `main.yml.example`); anche qui l'accesso sopravviveva solo per via del conntrack.
+- **`gnupg` mancante sui CT minimali** — `apt_repository` (repo Grafana con signed-by) fallisce senza gpg: aggiunto alle dipendenze del role monitoring.
+
+### Modificato
+- Gli exporter ascoltano su `0.0.0.0` (prima `127.0.0.1`, che rendeva impossibile lo scraping remoto): l'accesso è limitato da nftables al solo IP WireGuard del monitoring server (`tcp dport {9100,9119} ip saddr <wg del CT>`).
+- `grafana.ini`: `http_addr`, `root_url` e `cookie_secure` parametrizzati (`monitoring_gui_listen_addr`, `grafana_root_url`, `grafana_cookie_secure`) — l'accesso HTTP via nginx richiede `cookie_secure: false`.
+- Riepilogo di `site.yml`: la sezione MONITORING mostra gli URL per nome host del CT invece del comando SSH tunnel verso il primary.
 
 ## [1.7.5] — 2026-07-06
 
