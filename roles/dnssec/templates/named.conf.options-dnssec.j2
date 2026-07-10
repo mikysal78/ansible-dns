@@ -29,7 +29,7 @@ dnssec-policy "{{ dnssec_policy_name }}" {
 };
 
 acl "secondaries" {
-{% for ip in dns_secondary_ips %}
+{% for ip in dns_secondary_peer_ips %}
     {{ ip }};
 {% endfor %}
 };
@@ -46,9 +46,14 @@ options {
     allow-transfer    { key "{{ dns_tsig_key_name }}"; };
     allow-update      { key "{{ ddns_key_name }}"; };
 
-    notify yes;
+    // NOTIFY solo verso gli IP WireGuard dei secondari: dietro NAT la
+    // sorgente verso i loro IP pubblici sarebbe quella della NAT e i
+    // secondari (allow-notify { <wg-primary> }) la rifiuterebbero.
+    // "explicit" evita anche i NOTIFY agli NS pubblici della zona.
+    notify explicit;
+    notify-source {{ dns_primary_ip }};
     also-notify {
-{% for ip in dns_secondary_ips %}
+{% for ip in dns_secondary_peer_ips %}
         {{ ip }};
 {% endfor %}
     };

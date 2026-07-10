@@ -43,6 +43,15 @@ dnssec_print_ds: true
 # BIND performance (usato dal template named.conf.options-dnssec.j2)
 bind_transfers_out: 10
 
+# IP da cui i secondari contattano il primary: indirizzi WireGuard
+# dall'inventory, fallback sugli IP pubblici. Stessa definizione di
+# bind9_primary: i due role riscrivono lo stesso named.conf.options
+# e devono restare allineati (ACL allow-query e also-notify).
+dns_secondary_peer_ips: >-
+  {{ (groups['dns_secondary'] | default([])
+      | map('extract', hostvars, 'wg_address')
+      | select('defined') | list) or (dns_secondary_ips | default([])) }}
+
 # Migrazione algoritmo: rimuove le vecchie chiavi e le rigenera con la nuova policy.
 # Usare solo quando si cambia algoritmo (es. alg15→alg13). Passa -e dnssec_force_regen=true
 dnssec_force_regen: false
