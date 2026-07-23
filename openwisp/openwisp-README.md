@@ -1,81 +1,137 @@
 # Template OpenWISP 2 — DDNS via nsupdate (TSIG)
 
-Porta su OpenWISP la stessa configurazione DDNS del ruolo Ansible `ddns_openwrt`:
-ogni router OpenWrt registra il proprio record A nella zona dinamica del primary
-BIND tramite `nsupdate` con chiave TSIG.
+Ogni router OpenWrt registra il proprio record A nella zona dinamica del primary
+BIND tramite `nsupdate` con chiave TSIG. Lo script di update è sempre lo stesso
+(`/usr/lib/ddns/update_nsupdate.sh`, fa `delete + add` in un'unica transazione);
+cambia **chi lo lancia** e **quale IP** registra.
 
 ## Due varianti
 
-| File | IP registrato | A cosa serve |
+| File | IP registrato | Motore | A cosa serve |
+|---|---|---|---|
+| `openwisp-ddns-lan-template.json` | **IP di management** (`br-lan`) | **cron** | nome host per l'accesso **LuCI**; IP privato ma instradato in tutta NINUX via Babel |
+| `openwisp-ddns-template.json` | **IP pubblico WAN** (via `icanhazip` se dietro NAT/CGNAT) | ddns-scripts | raggiungere il router da Internet |
+
+Stessa zona, stessa chiave TSIG. **Hostname**: la variante cron usa il **nome
+puro** del device (`<nome>.<zona>`), la variante ddns-scripts usa
+`router-<nome>.<zona>`. Applica **una sola** variante per device.
+
+> La variante `br-lan` è caricata su OpenWISP (org Basilicata) come
+> **"DDNS nsupdate (br-lan / LuCI)"**, **non** *enabled by default*. Perché
+> funzioni servono: (1) il `ddns_secret` reale nei Default Values, (2) il primary
+> con la zona `dyn` in `allow-update { key ddns-key }`, (3) BIND raggiungibile
+> dai router sulla LAN (`dns_primary_lan_ip` + `ddns_allowed_sources` con il CIDR
+> `10.27.0.0/16` — vedi `group_vars/all/main.yml`).
+
+---
+
+## Variante consigliata: `openwisp-ddns-lan-template.json` (cron)
+
+Backend = **OpenWRT**, Type = *Generic*. Spinge come *additional files*:
+
+- `/usr/lib/ddns/update_nsupdate.sh` (0755) — legge l'IP di `br-lan` e fa
+  `nsupdate` (`update delete … A` + `update add … A`) verso il primary.
+- `/etc/ddns/ddns.key` (0600) — chiave TSIG.
+- `/etc/crontabs/root` (0600) — `*/{{ ddns_cron_minutes }} * * * *` che lancia lo
+  script.
+- `/etc/uci-defaults/99-install-ddns` (0755) — installa `bind-client` (nsupdate)
+  con **apk _o_ opkg** e avvia `cron` (eseguito al boot).
+
+### Variabili (Default Values)
+
+| Variabile | Default | Note |
 |---|---|---|
-| `openwisp-ddns-template.json` | **IP pubblico WAN** (via `icanhazip` se la WAN è privata/CGNAT) | raggiungere il router da Internet |
-| `openwisp-ddns-lan-template.json` | **IP dell'interfaccia di management** (default `br-lan`) | nome host per l'accesso **LuCI**; l'IP è privato ma instradato in tutta NINUX via Babel |
+| `ddns_zone` | `dyn.ninux-nnxx.it` | zona dinamica sul primary |
+| `dns_primary_ip` | `10.27.22.14` | IP LAN del primary BIND (listen-on + firewall aperti alla LAN) |
+| `ddns_interface` | `br-lan` | interfaccia di cui registrare l'IP (device name, es. `br-lan`) |
+| `ddns_ttl` | `60` | TTL del record A |
+| `ddns_key_name` | `ddns-key` | deve combaciare con la key sul primary |
+| `ddns_algorithm` | `hmac-sha256` | algoritmo TSIG |
+| `ddns_secret` | `CHANGEME…` | **segreto TSIG** — impostare il valore reale (in chiaro nel config del device) |
+| `ddns_cron_minutes` | `5` | ogni quanti minuti gira l'update |
 
-Sono lo stesso meccanismo (nsupdate/TSIG, stessa zona, stesso `router-<nome>.<zona>`):
-cambia solo **quale IP** finisce nel record A. La variante `br-lan` non ha il
-fallback su IP pubblico e usa `ip_source 'interface'` in `/etc/config/ddns`.
-Applica **una sola** delle due allo stesso device (stesso hostname → si
-sovrascriverebbero).
+L'hostname **non** è una variabile: è `{{ name }}.{{ ddns_zone }}`, dove `name`
+è il nome del device in OpenWISP. Nominali in modo coerente (es. `matera`,
+`salandra`).
 
-> Caricato su OpenWISP (org Basilicata) come **"DDNS nsupdate (br-lan / LuCI)"**,
-> per ora **non** *enabled by default*: prima imposta il `ddns_secret` reale e
-> assicurati che il primary abbia la zona `dyn` con `allow-update` deployata e
-> raggiungibile dai router.
+### Comportamento
 
-## Cosa contiene `openwisp-ddns-template.json`
+Il `delete + add` in un'unica transazione rende l'update **idempotente**:
 
-- `config` → da incollare nell'editor JSON (advanced mode) del **Template**
-  (Backend = *OpenWRT*, Type = *Generic*). Spinge come *additional files*:
-  - `/usr/lib/ddns/update_nsupdate.sh` (0755) — lo script di update
-  - `/etc/ddns/ddns.key` (0600) — la chiave TSIG
-  - `/etc/config/ddns` (0644) — la sezione UCI del servizio `ddns`
-  - `/etc/uci-defaults/99-install-ddns` (0755) — installa i pacchetti al primo apply
-- `default_values` → da incollare nel campo **Default Values** del template.
+- **IP invariato** → BIND calcola diff nullo = **no-op** (nessun bump del serial,
+  nessun AXFR ai secondari): zero churn anche girando ogni 5 min.
+- **IP cambiato** → il record segue il nuovo IP.
+- **Record perso** (reset zona, cancellazione) → **self-heal** entro ≤ `ddns_cron_minutes`.
 
-## Variabili
+### Attivazione (importante)
 
-| Variabile             | Default                     | Note |
-|-----------------------|-----------------------------|------|
-| `ddns_zone`           | `dyn.ninux-nnxx.it`         | zona dinamica sul primary |
-| `dns_primary_ip`      | `10.27.22.14`               | IP LAN del primary BIND (listen-on + firewall aperti alla LAN) raggiungibile dai router |
-| `ddns_interface`      | `wan`                       | interfaccia da monitorare |
-| `ddns_ttl`            | `60`                        | TTL del record A |
-| `ddns_key_name`       | `ddns-key`                  | deve combaciare con la key sul primary |
-| `ddns_algorithm`      | `hmac-sha256`               | algoritmo TSIG |
-| `ddns_secret`         | `CHANGEME...`               | **segreto TSIG** — impostare il valore reale |
-| `ddns_section`        | `ninux`                     | nome sezione UCI `ddns` |
-| `ddns_check_interval` | `300`                       | intervallo di check (secondi) |
-| `ddns_force_interval` | `72`                        | force update (ore) |
+`openwisp-config` **posa** i file ma non li **esegue**: l'`uci-defaults`
+(installa `bind-client` + avvia cron) parte **al boot**. Quindi sul primo apply
+di un router serve **un reboot** — oppure un kick manuale una tantum:
 
-L'hostname NON è una variabile: viene composto come `router-{{ name }}.{{ ddns_zone }}`,
-dove `name` è il nome del device in OpenWISP. Quindi basta nominare i device in modo
-coerente (es. `matera`, `salandra`).
+```sh
+# su router apk (OpenWrt 24.10+/25.x)
+apk add bind-client && /etc/init.d/cron enable && /etc/init.d/cron restart
+# su router opkg (23.05 e precedenti)
+opkg update && opkg install bind-client && /etc/init.d/cron enable && /etc/init.d/cron restart
+```
+
+### Perché cron e non ddns-scripts
+
+Provato sul campo (OpenWrt 25.12 / apk, ddns-scripts 2.8.3): la strada
+ddns-scripts richiede troppi workaround per registrare un **IP privato fisso**:
+
+1. `service_name 'custom'` → in 2.8.3 fa cercare una service-definition
+   inesistente e **ignora `update_script`** (*"No update_url/update_script"*).
+2. IP privato **rifiutato** senza `config ddns 'global' / option upd_privateip '1'`.
+3. `uci-defaults` con solo `opkg` **fallisce** sui router apk.
+4. `/etc/config/ddns` applicato via `uci import` è **additivo**: le opzioni tolte
+   dal template non vengono rimosse dal router (trappola di `service_name`).
+5. Lo **stato** di ddns-scripts non ripristina rapidamente un record perso.
+
+Il cron è stateless e li evita tutti. Unico vantaggio che si perde: la pagina di
+stato DDNS in **LuCI** (che qui non serve).
+
+---
+
+## Variante alternativa: `openwisp-ddns-template.json` (ddns-scripts, IP pubblico)
+
+Registra l'IP **pubblico** della WAN (fallback `icanhazip` dietro NAT), utile per
+raggiungere il router da Internet. Usa il framework `ddns-scripts`
+(`/etc/config/ddns` con `update_script`).
+
+> ⚠️ **Non testata sul fleet attuale.** Su router **apk** / ddns-scripts 2.8.3
+> richiede gli stessi fix visti sopra (togliere `service_name`, `uci-defaults`
+> apk+opkg). L'IP pubblico non ha il problema `upd_privateip`.
+
+Variabili aggiuntive rispetto alla variante cron: `ddns_section` (`ninux`),
+`ddns_check_interval` (`300`), `ddns_force_interval` (`72`).
+
+---
 
 ## Come importarlo
 
 1. *Templates* → *Add template*: Name a piacere, Backend = **OpenWRT**.
-2. Apri l'editor JSON (Advanced mode) e incolla il contenuto di `config`.
+2. Editor JSON (Advanced mode) → incolla il contenuto di `config`.
 3. Incolla `default_values` nel campo **Default Values** e imposta `ddns_secret`.
-4. Spunta *Enabled by default* se vuoi assegnarlo automaticamente ai nuovi device,
-   oppure assegnalo manualmente ai device esistenti.
+4. Assegna il template al device (o *Enabled by default* per i nuovi).
 
-## Note operative
+## Verifica
 
-- **Pacchetti**: i router devono avere `ddns-scripts`, `bind-client` (nsupdate) e
-  `curl`. Lo script `uci-defaults` li installa al primo apply (serve rete + feed
-  opkg raggiungibili). In alternativa includili nell'immagine firmware OpenWISP.
-- **Reload servizio**: alla modifica di `/etc/config/ddns` l'agent openwisp-config
-  esegue il reload del pacchetto `ddns`. Al primo deploy lo script uci-defaults fa
-  comunque `enable` + `restart`.
-- **Segreto TSIG**: `ddns_secret` finisce in chiaro nel config del device sul
-  controller. Trattalo come gli altri segreti OpenWISP (accesso al controller).
-- **Verifica** sul primary:
-  `dig @127.0.0.1 +short router-<device>.dyn.ninux-nnxx.it A`
-  e `rndc zonestatus dyn.ninux-nnxx.it`.
+Il primary **non** risponde alle query dai router (`allow-query { localhost;
+secondaries; }`): verifica sui **secondari** o via risoluzione pubblica.
+
+```sh
+dig +short @135.125.196.114 <nome>.dyn.ninux-nnxx.it A   # ns1
+dig +short <nome>.dyn.ninux-nnxx.it A                     # risoluzione pubblica
+```
+
+Sul router: `logread | grep -i ddns` (riga `Aggiornamento <nome> -> <ip>`) e
+`crontab -l`.
 
 ## Coerenza con Ansible
 
-Il primary continua a essere gestito da Ansible (`bind9_primary`): zona `dyn`
-con `allow-update` per `ddns-key`. I router possono essere gestiti **o** da
-`ddns_openwrt` (Ansible) **o** da questo template OpenWISP — non entrambi sullo
-stesso device, per evitare config concorrenti.
+Il primary è gestito da Ansible (`bind9_primary`): zona `dyn` con `allow-update`
+per `ddns-key`. Un router va gestito **o** da `ddns_openwrt` (Ansible) **o** da
+questo template OpenWISP, mai da entrambi. Nota: anche il ruolo `ddns_openwrt` è
+ddns-scripts + IP pubblico e, su router apk, richiederebbe gli stessi fix.

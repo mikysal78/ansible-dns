@@ -1,12 +1,12 @@
 {
-  "_comment": "Template OpenWISP2 DDNS nsupdate su interfaccia di management (default br-lan, accesso LuCI). Backend=OpenWRT. Incolla 'config' nell'editor JSON del Template e 'default_values' nel campo Default Values. L'hostname diventa router-<nome device>.<ddns_zone>.",
+  "_comment": "Template OpenWISP2 DDNS nsupdate su interfaccia di management (default br-lan, accesso LuCI) via cron. Backend=OpenWRT. Incolla config nell editor JSON del Template e default_values nel campo Default Values. Hostname = <nome device>.<ddns_zone>.",
   "backend": "netjsonconfig.backends.openwrt.OpenWrt",
   "config": {
     "files": [
       {
         "path": "/usr/lib/ddns/update_nsupdate.sh",
         "mode": "0755",
-        "contents": "#!/bin/sh\n# ============================================================\n# DDNS via nsupdate (TSIG) - gestito da OpenWISP\n# Registra l'IP dell'interfaccia di management (default br-lan,\n# quella che espone LuCI) nella zona dinamica del primary BIND.\n# L'IP e' privato ma instradato in tutta NINUX via Babel.\n# ============================================================\nDNS_SERVER=\"{{ dns_primary_ip }}\"\nTSIG_KEY=\"/etc/ddns/ddns.key\"\nDDNS_ZONE=\"{{ ddns_zone }}\"\nHOSTNAME=\"router-{{ name }}.{{ ddns_zone }}\"\nTTL=\"{{ ddns_ttl }}\"\nIFACE=\"{{ ddns_interface }}\"\n\nupdate_dns() {\n    ip=\"$1\"\n    logger -t ddns \"Aggiornamento ${HOSTNAME} -> ${ip}\"\n    nsupdate -k \"${TSIG_KEY}\" <<NSU\nserver ${DNS_SERVER}\nzone ${DDNS_ZONE}\nupdate delete ${HOSTNAME}. A\nupdate add ${HOSTNAME}. ${TTL} A ${ip}\nsend\nNSU\n}\n\n# IP dell'interfaccia (device), registrato cosi' com'e': niente\n# fallback su IP pubblico, qui vogliamo l'indirizzo interno instradato.\nget_iface_ip() {\n    ip -4 addr show \"$IFACE\" | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1\n}\n\nCURRENT_IP=$(get_iface_ip)\n[ -z \"$CURRENT_IP\" ] && { logger -t ddns \"ERRORE: IP di ${IFACE} non determinato\"; exit 1; }\nupdate_dns \"$CURRENT_IP\"\n"
+        "contents": "#!/bin/sh\n# ============================================================\n# DDNS via nsupdate (TSIG) - gestito da OpenWISP\n# Registra l'IP dell'interfaccia di management (default br-lan,\n# quella che espone LuCI) nella zona dinamica del primary BIND.\n# L'IP e' privato ma instradato in tutta NINUX via Babel.\n# ============================================================\nDNS_SERVER=\"{{ dns_primary_ip }}\"\nTSIG_KEY=\"/etc/ddns/ddns.key\"\nDDNS_ZONE=\"{{ ddns_zone }}\"\nHOSTNAME=\"{{ name }}.{{ ddns_zone }}\"\nTTL=\"{{ ddns_ttl }}\"\nIFACE=\"{{ ddns_interface }}\"\n\nupdate_dns() {\n    ip=\"$1\"\n    logger -t ddns \"Aggiornamento ${HOSTNAME} -> ${ip}\"\n    nsupdate -k \"${TSIG_KEY}\" <<NSU\nserver ${DNS_SERVER}\nzone ${DDNS_ZONE}\nupdate delete ${HOSTNAME}. A\nupdate add ${HOSTNAME}. ${TTL} A ${ip}\nsend\nNSU\n}\n\n# IP dell'interfaccia (device), registrato cosi' com'e': niente\n# fallback su IP pubblico, qui vogliamo l'indirizzo interno instradato.\nget_iface_ip() {\n    ip -4 addr show \"$IFACE\" | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1\n}\n\nCURRENT_IP=$(get_iface_ip)\n[ -z \"$CURRENT_IP\" ] && { logger -t ddns \"ERRORE: IP di ${IFACE} non determinato\"; exit 1; }\nupdate_dns \"$CURRENT_IP\"\n"
       },
       {
         "path": "/etc/ddns/ddns.key",
@@ -14,14 +14,14 @@
         "contents": "key \"{{ ddns_key_name }}\" {\n    algorithm {{ ddns_algorithm }};\n    secret \"{{ ddns_secret }}\";\n};\n"
       },
       {
-        "path": "/etc/config/ddns",
-        "mode": "0644",
-        "contents": "config service '{{ ddns_section }}'\n    option enabled '1'\n    option service_name 'custom'\n    option update_script '/usr/lib/ddns/update_nsupdate.sh'\n    option lookup_host 'router-{{ name }}.{{ ddns_zone }}'\n    option domain 'router-{{ name }}.{{ ddns_zone }}'\n    option ip_source 'interface'\n    option ip_interface '{{ ddns_interface }}'\n    option check_interval '{{ ddns_check_interval }}'\n    option check_unit 'seconds'\n    option force_interval '{{ ddns_force_interval }}'\n    option force_unit 'hours'\n    option retry_count '5'\n    option retry_interval '60'\n    option use_syslog '2'\n"
-      },
-      {
         "path": "/etc/uci-defaults/99-install-ddns",
         "mode": "0755",
-        "contents": "#!/bin/sh\n# Eseguito una sola volta (uci-defaults): installa i pacchetti DDNS.\nopkg update 2>/dev/null\nopkg install ddns-scripts bind-client curl 2>/dev/null\n/etc/init.d/ddns enable 2>/dev/null\n/etc/init.d/ddns restart 2>/dev/null\nexit 0\n"
+        "contents": "#!/bin/sh\n# Eseguito una volta (uci-defaults, al boot): installa nsupdate e avvia cron.\n# Gestisce sia apk (OpenWrt 24.10+/25.x) che opkg (23.05 e precedenti).\nif command -v apk >/dev/null 2>&1; then\n    apk update 2>/dev/null\n    apk add bind-client 2>/dev/null\nelif command -v opkg >/dev/null 2>&1; then\n    opkg update 2>/dev/null\n    opkg install bind-client 2>/dev/null\nfi\n/etc/init.d/cron enable 2>/dev/null\n/etc/init.d/cron restart 2>/dev/null\nexit 0\n"
+      },
+      {
+        "path": "/etc/crontabs/root",
+        "mode": "0600",
+        "contents": "# DDNS NINUX: registra {{ name }}.{{ ddns_zone }} (br-lan) via nsupdate\n*/{{ ddns_cron_minutes }} * * * * /usr/lib/ddns/update_nsupdate.sh\n"
       }
     ]
   },
@@ -33,8 +33,6 @@
     "ddns_key_name": "ddns-key",
     "ddns_algorithm": "hmac-sha256",
     "ddns_secret": "CHANGEME-inserire-il-segreto-TSIG",
-    "ddns_section": "ninux",
-    "ddns_check_interval": "300",
-    "ddns_force_interval": "72"
+    "ddns_cron_minutes": "5"
   }
 }
