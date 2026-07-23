@@ -4,6 +4,8 @@
 - name: Converge — primary
   hosts: dns_primary
   become: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
   roles:
     - role: packages
     - role: bind9_primary
@@ -12,6 +14,8 @@
 - name: Converge — secondary
   hosts: dns_secondary
   become: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
   roles:
     - role: packages
     - role: bind9_secondary

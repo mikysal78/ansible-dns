@@ -23,8 +23,6 @@ platforms:
     tmpfs:
       - /run
       - /run/lock
-    environment:
-      DEBIAN_FRONTEND: noninteractive
     groups:
       - dns_primary
 
@@ -39,8 +37,6 @@ platforms:
     tmpfs:
       - /run
       - /run/lock
-    environment:
-      DEBIAN_FRONTEND: noninteractive
     groups:
       - dns_secondary
 

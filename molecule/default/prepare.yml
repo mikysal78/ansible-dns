@@ -8,6 +8,8 @@
   hosts: all
   become: true
   gather_facts: false
+  environment:
+    DEBIAN_FRONTEND: noninteractive
 
   tasks:
     - name: Attendi che i container siano pronti
