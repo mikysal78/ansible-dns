@@ -45,11 +45,15 @@
       ansible.builtin.debug:
         var: zone_serials.stdout_lines
 
-    - name: Log BIND ultima ora (sign/notify/transfer/error)
+    # BIND logga su file (/var/log/named/*.log), NON su journald: named.log per
+    # general/security/xfer, dnssec.log per il signing. journalctl -u bind9 qui
+    # tornerebbe vuoto.
+    - name: Log BIND recenti (sign/notify/transfer/error) da /var/log/named
       ansible.builtin.shell:
         cmd: |
           set -o pipefail
-          journalctl -u bind9 --since "1 hour ago" --no-pager | grep -iE 'sign|notify|transfer|error|warn|refused' | tail -30
+          grep -hiE 'sign|notify|transfer|error|warn|refused' \
+            /var/log/named/named.log /var/log/named/dnssec.log 2>/dev/null | tail -30
         executable: /bin/bash
       register: bind_log
       changed_when: false
