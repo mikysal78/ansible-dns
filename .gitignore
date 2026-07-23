@@ -48,3 +48,6 @@ Thumbs.db
 
 # Temp
 *.tmp
+
+# Script di sessione locali (es. claude --resume)
+resume.sh
