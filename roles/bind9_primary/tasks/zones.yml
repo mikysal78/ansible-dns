@@ -162,48 +162,62 @@
 #   rndc freeze → scrittura (serial più alto) → rndc thaw (ricarica)
 # ATTENZIONE: i record dinamici tornano ai placeholder finché i
 # client non si ri-registrano.
+#
+# Il thaw sta in `always`: se la riscrittura fallisce (es. file zona
+# generato invalido) le zone NON devono restare congelate, altrimenti
+# TUTTO il DDNS si blocca silenziosamente finché qualcuno non fa thaw
+# a mano. Il freeze tollera "already frozen" (rndc esce rc=1) così un
+# run ripetuto dopo un abort non va in stallo sul freeze.
 # ------------------------------------------------------------
-- name: Freeze delle zone DDNS prima della riscrittura forzata
-  ansible.builtin.command:
-    cmd: "rndc freeze {{ item.name }}"
-  loop: "{{ dns_zones }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when:
-    - item.ddns_enabled | default(false)
-    - dns_force_ddns_rewrite | default(false) | bool
-  changed_when: true
+- name: Riscrittura forzata delle zone DDNS (freeze → rewrite → thaw garantito)
+  when: dns_force_ddns_rewrite | default(false) | bool
+  block:
 
-- name: Riscrivi le zone DDNS da YAML (riscrittura forzata)
-  ansible.builtin.template:
-    src: zone.db.j2
-    dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
-    owner: "{{ bind_user }}"
-    group: "{{ bind_group }}"
-    mode: "0644"
-    force: true
-  loop: "{{ dns_zones }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when:
-    - item.ddns_enabled | default(false)
-    - dns_force_ddns_rewrite | default(false) | bool
-  vars:
-    zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
-    zone_serial_override: >-
-      {{ [ (zone_cur_serial[item.name] | int) + 1,
-           ((ansible_facts.date_time.date | replace('-', '')) ~ '00') | int + 1 ] | max }}
+    - name: Freeze delle zone DDNS prima della riscrittura forzata
+      ansible.builtin.command:
+        cmd: "rndc freeze {{ item.name }}"
+      loop: "{{ dns_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.ddns_enabled | default(false)
+      register: _ddns_freeze
+      changed_when: _ddns_freeze.rc == 0
+      failed_when:
+        - _ddns_freeze.rc != 0
+        - "'already frozen' not in _ddns_freeze.stderr"
 
-- name: Thaw delle zone DDNS (ricarica il file e riabilita gli update dinamici)
-  ansible.builtin.command:
-    cmd: "rndc thaw {{ item.name }}"
-  loop: "{{ dns_zones }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when:
-    - item.ddns_enabled | default(false)
-    - dns_force_ddns_rewrite | default(false) | bool
-  changed_when: true
+    - name: Riscrivi le zone DDNS da YAML (riscrittura forzata)
+      ansible.builtin.template:
+        src: zone.db.j2
+        dest: "{{ bind_zones_dir }}/db.{{ item.name }}"
+        owner: "{{ bind_user }}"
+        group: "{{ bind_group }}"
+        mode: "0644"
+        force: true
+      loop: "{{ dns_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.ddns_enabled | default(false)
+      vars:
+        zone_data: "{{ lookup('file', dns_zones_dir_src + '/' + item.file) | from_yaml }}"
+        zone_serial_override: >-
+          {{ [ (zone_cur_serial[item.name] | int) + 1,
+               ((ansible_facts.date_time.date | replace('-', '')) ~ '00') | int + 1 ] | max }}
+
+  always:
+
+    - name: Thaw delle zone DDNS (ricarica il file e riabilita gli update dinamici)
+      ansible.builtin.command:
+        cmd: "rndc thaw {{ item.name }}"
+      loop: "{{ dns_zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.ddns_enabled | default(false)
+      register: _ddns_thaw
+      changed_when: _ddns_thaw.rc == 0
+      failed_when:
+        - _ddns_thaw.rc != 0
+        - "'not frozen' not in _ddns_thaw.stderr"
 
 - name: Verifica sintassi zone files
   ansible.builtin.command:
