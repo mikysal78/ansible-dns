@@ -34,6 +34,7 @@
       tags: [nftables]
     - role: bind9_primary   # BIND9 hidden master + zone files
     - role: dnssec          # inline signing DNSSEC
+      tags: [dnssec]
     - role: monitoring      # exporter (node+bind) — lo stack gira su ct-monitoring
     - role: acme_dns       # DNS-01 via nsupdate locale → propagazione ai secondari pubblici
 

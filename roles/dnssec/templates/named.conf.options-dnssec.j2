@@ -38,7 +38,7 @@ options {
     directory "/var/cache/bind";
     key-directory "{{ dnssec_key_directory }}";
 
-    listen-on    { 127.0.0.1; {{ dns_primary_ip }}; };
+    listen-on    { 127.0.0.1; {{ dns_primary_ip }};{% if dns_primary_lan_ip | default('') != '' %} {{ dns_primary_lan_ip }};{% endif %} };
     listen-on-v6 { none; };
 
     allow-query       { localhost; secondaries; };

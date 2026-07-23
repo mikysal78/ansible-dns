@@ -11,6 +11,11 @@ dns_admin_email: "hostmaster@example.com"
 dns_primary_ip: "10.99.0.1"
 dns_primary_port: 53
 
+# IP LAN del primary su cui BIND ascolta ANCHE per accettare nsupdate/DDNS
+# dalla LAN interna (oltre a loopback e all'IP WireGuard dns_primary_ip).
+# Lasciare vuoto ("") per non esporre BIND sull'interfaccia LAN.
+dns_primary_lan_ip: ""
+
 # --- IP pubblici dei secondari (lista) ---
 dns_secondary_ips:
   - "203.0.113.10"
@@ -30,15 +35,18 @@ ddns_secret: "{{ vault_ddns_secret }}"
 ddns_zone: "dyn.example.com"
 ddns_ttl: 60
 
-# IP autorizzati a raggiungere la porta 53 (UDP/TCP) del primary per
-# DDNS/nsupdate, oltre a 127.0.0.1 (sempre incluso). BIND ascolta solo su
-# loopback e sull'IP WireGuard: qui vanno quindi IP del tunnel (10.99.0.0/24),
-# mai IP di LAN pubblica. Esempio: l'ACME built-in di Proxmox (plugin
-# nsupdate) configurato come peer WireGuard per la challenge DNS-01 del
-# certificato della propria interfaccia web (vedi inventory/hosts.yml,
-# gruppo "proxmox", campo wg_address).
+# IP/reti autorizzati a raggiungere la porta 53 (UDP/TCP) del primary per
+# DDNS/nsupdate, oltre a 127.0.0.1 (sempre incluso). Accetta sia IP singoli
+# che CIDR (nftables crea un interval set automaticamente).
+#   - IP del tunnel WireGuard (10.99.0.0/24): es. l'ACME built-in di Proxmox
+#     (plugin nsupdate) come peer WireGuard per la challenge DNS-01 del
+#     certificato della propria interfaccia web (vedi inventory/hosts.yml).
+#   - CIDR di LAN interna: client nsupdate che aggiornano la zona dyn. Richiede
+#     che BIND ascolti anche sull'IP LAN (dns_primary_lan_ip) e che gli update
+#     restino autenticati via TSIG key (allow-update { key ... }).
 ddns_allowed_sources:
   - "10.99.0.4"
+  # - "10.27.0.0/16"
 
 # --- ACME / Let's Encrypt ---
 acme_email: "admin@example.com"
