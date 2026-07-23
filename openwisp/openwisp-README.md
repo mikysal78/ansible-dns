@@ -4,6 +4,24 @@ Porta su OpenWISP la stessa configurazione DDNS del ruolo Ansible `ddns_openwrt`
 ogni router OpenWrt registra il proprio record A nella zona dinamica del primary
 BIND tramite `nsupdate` con chiave TSIG.
 
+## Due varianti
+
+| File | IP registrato | A cosa serve |
+|---|---|---|
+| `openwisp-ddns-template.json` | **IP pubblico WAN** (via `icanhazip` se la WAN è privata/CGNAT) | raggiungere il router da Internet |
+| `openwisp-ddns-lan-template.json` | **IP dell'interfaccia di management** (default `br-lan`) | nome host per l'accesso **LuCI**; l'IP è privato ma instradato in tutta NINUX via Babel |
+
+Sono lo stesso meccanismo (nsupdate/TSIG, stessa zona, stesso `router-<nome>.<zona>`):
+cambia solo **quale IP** finisce nel record A. La variante `br-lan` non ha il
+fallback su IP pubblico e usa `ip_source 'interface'` in `/etc/config/ddns`.
+Applica **una sola** delle due allo stesso device (stesso hostname → si
+sovrascriverebbero).
+
+> Caricato su OpenWISP (org Basilicata) come **"DDNS nsupdate (br-lan / LuCI)"**,
+> per ora **non** *enabled by default*: prima imposta il `ddns_secret` reale e
+> assicurati che il primary abbia la zona `dyn` con `allow-update` deployata e
+> raggiungibile dai router.
+
 ## Cosa contiene `openwisp-ddns-template.json`
 
 - `config` → da incollare nell'editor JSON (advanced mode) del **Template**
