@@ -27,7 +27,7 @@
   },
   "default_values": {
     "ddns_zone": "dyn.ninux-nnxx.it",
-    "dns_primary_ip": "10.27.0.1",
+    "dns_primary_ip": "10.27.22.14",
     "ddns_interface": "br-lan",
     "ddns_ttl": "60",
     "ddns_key_name": "ddns-key",

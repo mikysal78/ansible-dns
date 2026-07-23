@@ -37,7 +37,7 @@ sovrascriverebbero).
 | Variabile             | Default                     | Note |
 |-----------------------|-----------------------------|------|
 | `ddns_zone`           | `dyn.ninux-nnxx.it`         | zona dinamica sul primary |
-| `dns_primary_ip`      | `10.27.0.1`                 | IP del primary BIND raggiungibile dai router |
+| `dns_primary_ip`      | `10.27.22.14`               | IP LAN del primary BIND (listen-on + firewall aperti alla LAN) raggiungibile dai router |
 | `ddns_interface`      | `wan`                       | interfaccia da monitorare |
 | `ddns_ttl`            | `60`                        | TTL del record A |
 | `ddns_key_name`       | `ddns-key`                  | deve combaciare con la key sul primary |
