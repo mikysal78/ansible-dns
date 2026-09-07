@@ -7,15 +7,21 @@ set -uo pipefail
 CERT="{{ acme_certs_dir }}/{{ item.domain }}"
 KEY="{{ acme_deploy_key }}"
 SSH="ssh -i $KEY -p {{ acme_deploy_ssh_port }} -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10"
+# scp invece di rsync: rsync non e' garantito su primary/target (sul primary
+# NON e' installato) e la sua assenza faceva fallire la copia stampando "OK".
+SCP="scp -i $KEY -P {{ acme_deploy_ssh_port }} -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10"
 
 {% for target in item.deploy %}
 if $SSH root@{{ target.host }} true 2>/dev/null; then
     $SSH root@{{ target.host }} "mkdir -p {{ acme_certs_dir }}"
-    rsync -az -e "$SSH" "${CERT}.fullchain.pem" "${CERT}.key" \
-        root@{{ target.host }}:{{ acme_certs_dir }}/
-    $SSH root@{{ target.host }} \
-        "chmod 640 {{ acme_certs_dir }}/{{ item.domain }}.key && {{ target.reload_cmd }}"
-    echo "Deploy {{ item.domain }} su {{ target.host }}: OK"
+    # La copia DEVE riuscire prima di chmod+reload: se fallisce non stampare OK.
+    if $SCP "${CERT}.fullchain.pem" "${CERT}.key" root@{{ target.host }}:{{ acme_certs_dir }}/; then
+        $SSH root@{{ target.host }} \
+            "chmod 640 {{ acme_certs_dir }}/{{ item.domain }}.key && {{ target.reload_cmd }}"
+        echo "Deploy {{ item.domain }} su {{ target.host }}: OK"
+    else
+        echo "ERRORE: deploy {{ item.domain }} su {{ target.host }} FALLITO (copia cert)" >&2
+    fi
 else
     echo "WARN: {{ target.host }} non raggiungibile, deploy saltato" >&2
 fi
