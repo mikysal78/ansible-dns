@@ -227,9 +227,13 @@
     name: "acme.sh renew"
     minute: "30"
     hour: "2"
+    # --config-home è indispensabile: senza, acme.sh --cron non ricava
+    # LE_CONFIG_HOME dalla riga di crontab (custom, scritta da Ansible),
+    # non carica account.conf/CERT_HOME e rinnova SILENZIOSAMENTE 0 cert.
     job: >
       {{ acme_install_dir }}/acme.sh
       --cron
       --home {{ acme_install_dir }}
+      --config-home {{ acme_install_dir }}/config
       >> /var/log/acme-renew.log 2>&1
     user: root
