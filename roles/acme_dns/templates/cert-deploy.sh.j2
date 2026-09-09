@@ -26,6 +26,28 @@ else
     echo "WARN: {{ target.host }} non raggiungibile, deploy saltato" >&2
 fi
 {% endfor %}
+{% for syn in item.synology | default([]) %}
+
+# --- Synology DSM import: {{ syn.host }} ---
+# DSM non usa /etc/ssl/acme ne systemctl: il cert va importato nello store
+# certificati con synow3tool. Il NAS non ha il subsystem SFTP (scp fallisce),
+# quindi i file si trasferiscono con "ssh + cat"; l'import gira come root via
+# uno script installer dedicato autorizzato in sudoers NOPASSWD.
+SYN_SSH="ssh -i $KEY -p {{ syn.port | default(acme_deploy_ssh_port) }} -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10"
+SYN_STAGE="{{ syn.stage | default('/tmp/nnxx-cert-stage') }}"
+if $SYN_SSH {{ syn.user }}@{{ syn.host }} true 2>/dev/null; then
+    if $SYN_SSH {{ syn.user }}@{{ syn.host }} "mkdir -p $SYN_STAGE && chmod 700 $SYN_STAGE" \
+       && $SYN_SSH {{ syn.user }}@{{ syn.host }} "cat > $SYN_STAGE/fullchain.pem" < "${CERT}.fullchain.pem" \
+       && $SYN_SSH {{ syn.user }}@{{ syn.host }} "cat > $SYN_STAGE/privkey.pem" < "${CERT}.key" \
+       && $SYN_SSH {{ syn.user }}@{{ syn.host }} "{{ syn.import_cmd | default('sudo -n /usr/local/bin/syno-cert-import.sh') }}"; then
+        echo "Deploy {{ item.domain }} su Synology {{ syn.host }}: OK"
+    else
+        echo "ERRORE: import Synology {{ syn.host }} FALLITO" >&2
+    fi
+else
+    echo "WARN: Synology {{ syn.host }} non raggiungibile, import saltato" >&2
+fi
+{% endfor %}
 
 # Reload locale
 {{ acme_reload_cmd }}
