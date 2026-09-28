@@ -5,6 +5,9 @@ collections:
   - name: ansible.posix
     version: ">=1.5.0"
   # Moduli Proxmox (proxmox_kvm, proxmox_disk, proxmox_nic, proxmox_snap)
-  # spostati da community.general a community.proxmox
+  # spostati da community.general a community.proxmox.
+  # Pin entro la major 2: la 2.0.0 richiede ansible-core >=2.17 (Debian stable
+  # Trixie offre 2.19.11, ok). Evita che una futura 3.0 alzi il requisito oltre
+  # ciò che offre Debian stable.
   - name: community.proxmox
-    version: ">=1.0.0"
+    version: ">=2.0.0,<3.0.0"
