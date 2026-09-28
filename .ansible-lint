@@ -29,11 +29,11 @@ warn_list:
 
 use_default_rules: true
 
-# NB: i moduli community.proxmox NON vanno più mockati: la collection è ora
-# installata da requirements.yml (>=2.0.0), quindi ansible-lint risolve i
-# moduli reali. Mantenere i mock creava un conflitto stub/collezione reale
-# ("Invalid value (None) for resolved_fqcn ... proxmox_kvm") → lint exit 2.
-mock_modules:
-  - community.general.opkg
+# NB: NESSUN mock_modules. Tutti i moduli usati provengono da collection
+# installate da requirements.yml (community.general, community.proxmox,
+# ansible.posix), quindi ansible-lint li risolve dai moduli reali. Aggiungere
+# un mock per un modulo GIA' installato crea un conflitto stub/collezione reale
+# (mock in .ansible/ansible-lint-mocks vs collezione reale) che, con le versioni
+# recenti di ansible-lint, fa fallire la risoluzione → syntax-check exit 2.
 
 verbosity: 1
