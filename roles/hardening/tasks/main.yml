@@ -14,7 +14,9 @@
     upgrade: safe
   register: apt_upgrade_result
 
-- name: "[hardening] Mostra pacchetti aggiornati"
+# noqa: no-handler — è output informativo condizionale (debug), non un'azione
+# da innescare a fine play: un handler qui non avrebbe senso.
+- name: "[hardening] Mostra pacchetti aggiornati"  # noqa: no-handler
   ansible.builtin.debug:
     msg: "{{ apt_upgrade_result.stdout_lines | default([]) }}"
   when: apt_upgrade_result.changed

@@ -20,7 +20,8 @@
   delegate_to: localhost
   register: snapshot_result
 
-- name: Mostra risultato snapshot
+# noqa: no-handler — output informativo condizionale (debug), non un handler.
+- name: Mostra risultato snapshot  # noqa: no-handler
   ansible.builtin.debug:
     msg: "Snapshot '{{ proxmox_snapshot_name }}' creato su VMID {{ proxmox_primary_vmid }}"
   when: snapshot_result.changed

@@ -6,6 +6,10 @@ rules:
   line-length:
     max: 200
     level: warning
+    # Le zone contengono record TXT/DKIM (chiavi base64) intrinsecamente lunghi
+    # e non spezzabili senza corrompere il valore renderizzato: esentate.
+    ignore: |
+      zones/
   truthy:
     allowed-values: ["true", "false", "yes", "no"]
     check-keys: false

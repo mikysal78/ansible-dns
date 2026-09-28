@@ -8,7 +8,9 @@
 # Usato durante migrazione algoritmo (es. alg15→alg13): rimuove le vecchie chiavi
 # prima che BIND le ricarichi con la nuova policy. Eseguire con:
 #   ansible-playbook ... -e dnssec_force_regen=true
-- name: Rimuovi vecchie chiavi e journal DNSSEC (migrazione algoritmo)
+# noqa: command-instead-of-module — stop/rm-glob/start vanno eseguiti in modo
+# atomico nello stesso shell: usare il modulo systemd spezzerebbe la sequenza.
+- name: Rimuovi vecchie chiavi e journal DNSSEC (migrazione algoritmo)  # noqa: command-instead-of-module
   ansible.builtin.shell:
     cmd: |
       systemctl stop bind9
