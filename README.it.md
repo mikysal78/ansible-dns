@@ -2,6 +2,8 @@
 
 🇮🇹 Italiano · [🇬🇧 English](README.md)
 
+> 📖 Questo repository fa parte dell'infrastruttura di **NINUX Basilicata**: la guida per ricostruirla tutta, passo passo (Proxmox, DNS, OpenWISP, moduli, firmware, app), è su **[docs.ninux-nnxx.it](https://docs.ninux-nnxx.it)**.
+
 [![CI](https://github.com/mikysal78/ansible-dns/actions/workflows/ci.yml/badge.svg)](https://github.com/mikysal78/ansible-dns/actions/workflows/ci.yml)
 [![ansible-lint](https://img.shields.io/badge/ansible--lint-passing-brightgreen)](https://github.com/ansible/ansible-lint)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
